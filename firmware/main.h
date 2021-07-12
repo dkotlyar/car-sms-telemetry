@@ -21,6 +21,8 @@ uint32_t get_millis(void);
 // PROJECT SECTION
 
 #define USART0_ENABLE
+//#define USART1_ENABLE
+#define SIM868_USART    0   // Specified USART port
 
 #define CAN_BAUDRATE   500        // in kBit
 

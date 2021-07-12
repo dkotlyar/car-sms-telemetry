@@ -20,7 +20,7 @@ usart_t usart0 = {
 };
 ISR (USART0_RX_vect) {
         uint8_t data = UDR0;
-        (*usart0.rx_vec)(data);
+        (usart0.rx_vec)(data);
 }
 #endif
 
@@ -43,7 +43,7 @@ usart_t usart1 = {
 };
 ISR (USART1_RX_vect) {
         uint8_t data = UDR1;
-        (*usart1.rx_vec)(data);
+        (usart1.rx_vec)(data);
 }
 #endif
 
