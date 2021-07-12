@@ -1,0 +1,4 @@
+#ifndef FIRMWARE_SIM868_H
+#define FIRMWARE_SIM868_H
+
+#endif //FIRMWARE_SIM868_H
