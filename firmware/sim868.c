@@ -251,8 +251,9 @@ void sim868_main_loop(void) {
             SIM868_async_wait();
             len = strlen(fileBuffer);
             lens[0] = 0;
-            sprintf(lens, "%d", len);
-            usart_println_sync(get_main_usart(), "Write file");
+            sprintf(lens, "%u", len);
+            usart_print_sync(get_main_usart(), "Write file, bytes: ");
+            usart_println_sync(get_main_usart(), lens);
             usart_print_sync(sim868_usart, "AT+FSWRITE=C:\\buffer\\today\\");
             usart_print_sync(sim868_usart, fileName);
             usart_print_sync(sim868_usart, ",0,");
@@ -300,7 +301,7 @@ void sim868_main_loop(void) {
                 status = SIM868_STATUS_WAIT_FILECONTENT;
                 ml_status = 5;
             } else {
-                usart_println_sync(get_main_usart(), "No today files, goto 20");
+//                usart_println_sync(get_main_usart(), "No today files, goto 20");
                 ml_status = 20;
             }
             break;
