@@ -1,4 +1,5 @@
 #include "main.h"
+#include "millis.h"
 #include "usart_lib.h"
 // Library from example "CAN ATmega32M1" http://www.hpinfotech.ro/cvavr-examples.html | https://forum.digikey.com/t/can-example-atmega32m1-stk600/13039
 // but original Atmel Library does not accessible by link http://www.atmel.com/tools/cansoftwarelibrary.aspx
@@ -10,22 +11,23 @@
 usart_t *usart;
 uint8_t usart_rx_buffer;
 
-uint32_t _millis = 0;
-uint32_t get_millis(void) {
-    return _millis;
-}
-
 usart_t* get_main_usart(void) {
     return usart;
 }
 
 void usart_rx(uint8_t data) {
-//    long_blink();
-//    usart_send_sync(usart, data);
-//    usart_send_sync(sim868_get_usart(), data);
+#ifdef SIM868_USART_BRIDGE
+    usart_send_sync(usart, data); // echo
+    usart_send_sync(sim868_get_usart(), data);
+#endif
 }
 
 void init(void) {
+    SETBIT_1(LED_DDR, LED_Pn);
+    LED_OFF();
+
+    millis_init();
+
 #   if MAIN_USART == 0
     usart = &usart0;
 #   elif MAIN_USART == 1
@@ -41,37 +43,37 @@ void init(void) {
 //#   endif
 
     sim868_init();
-    sim868_init();
-
-    SETBIT_1(LED_DDR, LED_Pn);
-    LED_OFF();
+    sim868_httpUrl("http://dkotlyar.ru:8000/post_test");
 }
 
 void loop(void) {
-//    sim868_test();
-//    usart_send_sync(usart, 'H');
+#ifndef SIM868_USART_BRIDGE
 //#   ifdef CAN_ENABLE
 //    obd2_loop();
 //#   endif
-    _delay_ms(5000);
-    usart_print_sync(usart, "IMEI: ");
-    usart_println_sync(usart, imei);
-    usart_print_sync(usart, "GNSS: ");
-    usart_println_sync(usart, cgnurc);
 
-    char buf[500];
-    sprintf(buf, "{\"imei\":\"%s\",\"gps\":\"%s\"}", imei, cgnurc);
-    sim868_post(buf);
+    sim868_loop();
+
+    static uint32_t lastStart = 0;
+    uint32_t _millis = millis();
+    if ((_millis - lastStart) > 5000) {
+        usart_print_sync(usart, "IMEI: ");
+        usart_println_sync(usart, imei);
+        usart_print_sync(usart, "GNSS: ");
+        usart_println_sync(usart, cgnurc);
+        lastStart = _millis;
+
+        char buf[255];
+        sprintf(buf, "{\"imei\":\"%s\",\"gps\":\"%s\"}", imei, cgnurc);
+        sim868_post_async(buf);
+    }
+#endif
 }
 
 int main(void) {
 	cli();
 	init();
 	sei();
-
-    sim868_getIMEI();
-    sim868_enableGnss();
-    sim868_httpUrl("http://dkotlyar.ru:8000/post_test");
 	
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"

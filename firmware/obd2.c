@@ -2,6 +2,7 @@
 #include "main.h"
 #include "canlib/can_lib.h"
 #include "usart_lib.h"
+#include "millis.h"
 
 obd2_pid_t engine_coolant_temperature; // PID 05
 obd2_pid_t engine_speed; // PID 0C
@@ -84,18 +85,18 @@ void obd2_loop(void) {
             case OBD2_REQUEST_REGISTER_TX_MOB:
                 if (can_cmd(&obd_reqs[i].can_tx) == CAN_CMD_ACCEPTED) {
                     obd_reqs[i].status = OBD2_REQUEST_TX_PENDING;
-                    obd_reqs[i].timestamp = get_millis();
+                    obd_reqs[i].timestamp = millis();
                 }
                 break;
             case OBD2_REQUEST_TX_PENDING:
                 tx_status = can_get_status(&obd_reqs[i].can_tx);
                 if (tx_status == CAN_STATUS_COMPLETED) {
                     obd_reqs[i].status = OBD2_REQUEST_RX_PENDING;
-                    obd_reqs[i].timestamp = get_millis();
+                    obd_reqs[i].timestamp = millis();
                 } else if (tx_status == CAN_STATUS_ERROR) {
                     obd_reqs[i].status = OBD2_REQUEST_ERROR;
                 }
-                if ((get_millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
+                if ((millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
                     obd_reqs[i].status = OBD2_REQUEST_TIMEOUT;
                 }
                 break;
@@ -109,7 +110,7 @@ void obd2_loop(void) {
                 } else {
                     obd_reqs[i].status = OBD2_REQUEST_ERROR;
                 }
-                if ((get_millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
+                if ((millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
                     obd_reqs[i].status = OBD2_REQUEST_TIMEOUT;
                 }
                 break;
@@ -143,7 +144,7 @@ void obd2_write(uint8_t service_number, uint8_t pid_code, uint8_t A, uint8_t B, 
             pids[i]->B = B;
             pids[i]->C = C;
             pids[i]->D = D;
-            pids[i]->timestamp = get_millis();
+            pids[i]->timestamp = millis();
             pids[i]->status = OBD2_PID_OK;
             return;
         }
