@@ -10,7 +10,6 @@
 #include <avr/interrupt.h>
 #include "usart_lib.h"
 
-uint32_t get_millis(void);
 usart_t* get_main_usart(void);
 
 #define SETBIT(reg, bit, value)     {if (value) {SETBIT_1(reg, bit)} else {SETBIT_0(reg, bit)}}
@@ -28,6 +27,7 @@ usart_t* get_main_usart(void);
 
 #define MAIN_USART      1   // Specified USART port for main communication
 #define SIM868_USART    0   // Specified USART port for SIM868 module
+//#define SIM868_USART_BRIDGE
 
 #define CAN_BAUDRATE   500        // in kBit
 
