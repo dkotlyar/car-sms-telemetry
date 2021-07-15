@@ -57,15 +57,21 @@ void loop(void) {
     static uint32_t lastStart = 0;
     uint32_t _millis = millis();
     if ((_millis - lastStart) > 5000) {
-        usart_print_sync(usart, "IMEI: ");
-        usart_println_sync(usart, imei);
-        usart_print_sync(usart, "GNSS: ");
-        usart_println_sync(usart, cgnurc);
+        uint8_t status = sim868_status();
+//        char status_str[3];
+//        sprintf(status_str, "%u", status);
+//        usart_print_sync(usart, "IMEI: ");
+//        usart_println_sync(usart, imei);
+//        usart_print_sync(usart, "GNSS: ");
+//        usart_println_sync(usart, cgnurc);
+//        usart_print_sync(usart, "Status: ");
+//        usart_println_sync(usart, status_str);
         lastStart = _millis;
 
         char buf[255];
         sprintf(buf, "{\"imei\":\"%s\",\"gps\":\"%s\"}", imei, cgnurc);
         sim868_post_async(buf);
+//        sim868_post("http://dkotlyar.ru:8000/post_test", buf);
     }
 #endif
 }
