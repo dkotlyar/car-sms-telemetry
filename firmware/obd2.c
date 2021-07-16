@@ -4,176 +4,147 @@
 #include "usart_lib.h"
 #include "millis.h"
 
-obd2_pid_t engine_coolant_temperature; // PID 05
-obd2_pid_t engine_speed; // PID 0C
-obd2_pid_t vehicle_speed; // PID 0D
-obd2_pid_t run_time_since_engine_start; // PID 1F
-obd2_pid_t fuel_level; // PID 2F
-obd2_pid_t ambient_air_temperature; // PID 46
+uint8_t engine_coolant_temperature; // PID 05
+uint8_t vehicle_speed; // PID 0D
+uint16_t run_time_since_engine_start; // PID 1F
+uint8_t fuel_level; // PID 2F
+uint32_t odometr; // PID A6
 
-obd2_pid_t *pids[OBD2_PIDS];
-
-obd2_request_async_t obd_reqs[OBD2_PARALLEL_REQUESTS];
-uint8_t obd_rx_buffer[OBD2_PARALLEL_REQUESTS][8];
-uint8_t obd_tx_buffer[OBD2_PARALLEL_REQUESTS][8];
+st_cmd_t can_rx;
+st_cmd_t can_tx;
+uint8_t obd_rx_buffer[8];
+uint8_t obd_tx_buffer[8];
 
 void obd2_init(void) {
-    engine_coolant_temperature.pid_code = 0x05;
-    engine_coolant_temperature.status   = OBD2_PID_NODATA;
-    pids[0] = &engine_coolant_temperature;
-
-    engine_speed.pid_code               = 0x0C;
-    engine_speed.status                 = OBD2_PID_NODATA;
-    pids[1] = &engine_speed;
-
-    vehicle_speed.pid_code              = 0x0D;
-    vehicle_speed.status                = OBD2_PID_NODATA;
-    pids[2] = &vehicle_speed;
-
-    run_time_since_engine_start.pid_code = 0x1F;
-    run_time_since_engine_start.status   = OBD2_PID_NODATA;
-    pids[3] = &run_time_since_engine_start;
-
-    fuel_level.pid_code                 = 0x2F;
-    fuel_level.status                   = OBD2_PID_NODATA;
-    pids[4] = &fuel_level;
-
-    ambient_air_temperature.pid_code    = 0x46;
-    ambient_air_temperature.status      = OBD2_PID_NODATA;
-    pids[5] = &ambient_air_temperature;
-
-    for (uint8_t i = 0; i < OBD2_PARALLEL_REQUESTS; i++) {
-        obd_reqs[i].can_rx.pt_data = &obd_rx_buffer[i][0];
-        obd_reqs[i].can_tx.pt_data = &obd_tx_buffer[i][0];
-    }
+    can_init(0);
+    can_rx.pt_data = &obd_rx_buffer[0];
+    can_tx.pt_data = &obd_tx_buffer[0];
 }
 
-void obd2_loop(void) {
+void obd2_handle(uint8_t* pt_data) {
+    usart_println_sync(get_main_usart(), "handle: ");
+    for (uint8_t i = 0; i < 8; i++) {
+        usart_send_sync(get_main_usart(), pt_data[i]);
+    }
+    return;
+
+//    uint8_t service_number = pt_data[1];
+//    if (service_number != 0x41) {
+//        return;
+//    }
+//
+//    uint8_t pid_code = pt_data[2];
+//    uint8_t *payload = &pt_data[3];
+//
+//    switch (pid_code) {
+//        case 05: // Engine coolant temperature
+//            engine_coolant_temperature = payload[0] - 40;
+//            break;
+//    }
+}
+
+uint8_t obd2_reqloop(uint8_t pid_code) {
     uint8_t rx_status;
     uint8_t tx_status;
 
-    for (uint8_t i = 0; i < OBD2_PARALLEL_REQUESTS; i++) {
-        switch (obd_reqs[i].status) {
-            case OBD2_REQUEST_NEW:
-                obd_reqs[i].pid_code = obd2_getnext_pid_code();
-                if (obd_reqs[i].pid_code != 0) {
-                    obd_reqs[i].can_rx.status = 0;
-                    obd_reqs[i].can_rx.id.std = OBD2_RX_IDE;
-                    obd_reqs[i].can_rx.idmsk.std = OBD2_RX_IDMSK;
-                    obd_reqs[i].can_rx.ctrl.ide = 0;
-                    obd_reqs[i].can_rx.ctrl.rtr = 0;
-                    obd_reqs[i].can_rx.dlc = 8;
-                    obd_reqs[i].can_rx.cmd = CMD_RX_DATA_MASKED;
-                    for (uint8_t j = 0; j < 8; j++) { obd_reqs[i].can_tx.pt_data[j] = 0; }
-                    obd_reqs[i].can_tx.pt_data[0] = 2; // Количество байт (всегда 2)
-                    obd_reqs[i].can_tx.pt_data[1] = 1; // ID сервиса (всегда 1)
-                    obd_reqs[i].can_tx.pt_data[2] = obd_reqs[i].pid_code;
-                    obd_reqs[i].can_tx.status = 0;
-                    obd_reqs[i].can_tx.id.std = OBD2_TX_IDE;
-                    obd_reqs[i].can_tx.ctrl.ide = 0;
-                    obd_reqs[i].can_tx.ctrl.rtr = 0;
-                    obd_reqs[i].can_tx.dlc = 8;
-                    obd_reqs[i].can_tx.cmd = CMD_TX_DATA;
-                    obd_reqs[i].status = OBD2_REQUEST_REGISTER_RX_MOB;
-                }
-                break;
-            case OBD2_REQUEST_REGISTER_RX_MOB:
-                if (can_cmd(&obd_reqs[i].can_rx) == CAN_CMD_ACCEPTED) {
-                    obd_reqs[i].status = OBD2_REQUEST_REGISTER_TX_MOB;
-                }
-                break;
-            case OBD2_REQUEST_REGISTER_TX_MOB:
-                if (can_cmd(&obd_reqs[i].can_tx) == CAN_CMD_ACCEPTED) {
-                    obd_reqs[i].status = OBD2_REQUEST_TX_PENDING;
-                    obd_reqs[i].timestamp = millis();
-                }
-                break;
-            case OBD2_REQUEST_TX_PENDING:
-                tx_status = can_get_status(&obd_reqs[i].can_tx);
-                if (tx_status == CAN_STATUS_COMPLETED) {
-                    obd_reqs[i].status = OBD2_REQUEST_RX_PENDING;
-                    obd_reqs[i].timestamp = millis();
-                } else if (tx_status == CAN_STATUS_ERROR) {
-                    obd_reqs[i].status = OBD2_REQUEST_ERROR;
-                }
-                if ((millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
-                    obd_reqs[i].status = OBD2_REQUEST_TIMEOUT;
-                }
-                break;
-            case OBD2_REQUEST_RX_PENDING:
-                rx_status = can_get_status(&obd_reqs[i].can_rx);
-                if (rx_status == CAN_STATUS_COMPLETED) {
-                    obd2_write(obd_reqs[i].can_rx.pt_data[1], obd_reqs[i].can_rx.pt_data[2],
-                               obd_reqs[i].can_rx.pt_data[3], obd_reqs[i].can_rx.pt_data[4],
-                               obd_reqs[i].can_rx.pt_data[5], obd_reqs[i].can_rx.pt_data[6]);
-                    obd_reqs[i].status = OBD2_REQUEST_OK;
-                } else {
-                    obd_reqs[i].status = OBD2_REQUEST_ERROR;
-                }
-                if ((millis() - obd_reqs[i].timestamp) > OBD2_DEFAULT_TIMEOUT) {
-                    obd_reqs[i].status = OBD2_REQUEST_TIMEOUT;
-                }
-                break;
-            case OBD2_REQUEST_OK:
-                obd_reqs[i].status = OBD2_REQUEST_NEW;
-                break;
-            case OBD2_REQUEST_TIMEOUT:
-            case OBD2_REQUEST_ERROR:
-                obd_reqs[i].can_rx.cmd = CMD_ABORT;
-                obd_reqs[i].can_tx.cmd = CMD_ABORT;
-                can_cmd(&obd_reqs[i].can_rx);
-                can_cmd(&obd_reqs[i].can_tx);
-                obd_reqs[i].status = OBD2_REQUEST_OK;
-                obd2_abort(obd_reqs[i].pid_code);
-                break;
-            default:
-                obd_reqs[i].status = OBD2_REQUEST_ERROR;
-                break;
-        }
+    static uint8_t status = 0;
+    static uint32_t watchdog = 0;
+
+    uint8_t retval = 0;
+
+    switch (status) {
+        case 0:
+            status++;
+            break;
+        case 1:
+            can_rx.status = 0;
+            can_rx.id.std = OBD2_RX_IDE;
+            can_rx.idmsk.std = OBD2_RX_IDMSK;
+            can_rx.ctrl.ide = 0;
+            can_rx.ctrl.rtr = 0;
+            can_rx.dlc = 8;
+            can_rx.cmd = CMD_RX_DATA_MASKED;
+            for (uint8_t j = 0; j < 8; j++) { can_tx.pt_data[j] = 0; }
+            can_tx.pt_data[0] = 2; // Количество байт (всегда 2)
+            can_tx.pt_data[1] = 1; // ID сервиса (всегда 1)
+            can_tx.pt_data[2] = pid_code;
+            can_tx.status = 0;
+            can_tx.id.std = OBD2_TX_IDE;
+            can_tx.ctrl.ide = 0;
+            can_tx.ctrl.rtr = 0;
+            can_tx.dlc = 8;
+            can_tx.cmd = CMD_TX_DATA;
+            status++;
+            break;
+        case 2:
+            if (can_cmd(&can_rx) == CAN_CMD_ACCEPTED) {
+                status++;
+                usart_println_sync(get_main_usart(), "rx registred");
+            }
+            break;
+        case 3:
+            if (can_cmd(&can_tx) == CAN_CMD_ACCEPTED) {
+                status++;
+                watchdog = millis();
+                usart_println_sync(get_main_usart(), "tx registred");
+            }
+            break;
+        case 4:
+            tx_status = can_get_status(&can_tx);
+            if (tx_status == CAN_STATUS_COMPLETED) {
+                status++;
+                watchdog = millis();
+                usart_println_sync(get_main_usart(), "tx pushed");
+            } else if (tx_status == CAN_STATUS_ERROR) {
+                status = OBD2_REQUEST_ERROR;
+                usart_println_sync(get_main_usart(), "tx err");
+            }
+            if ((millis() - watchdog) > OBD2_DEFAULT_TIMEOUT) {
+                status = OBD2_REQUEST_TIMEOUT;
+                usart_println_sync(get_main_usart(), "tx timeout");
+            }
+            break;
+        case 5:
+            rx_status = can_get_status(&can_rx);
+            if (rx_status == CAN_STATUS_COMPLETED) {
+                usart_println_sync(get_main_usart(), "rx received");
+                obd2_handle(can_rx.pt_data);
+                status = OBD2_REQUEST_OK;
+            } else if (rx_status == CAN_STATUS_ERROR) {
+                status = OBD2_REQUEST_ERROR;
+                usart_println_sync(get_main_usart(), "rx err");
+            }
+            if ((millis() - watchdog) > OBD2_DEFAULT_TIMEOUT) {
+                status = OBD2_REQUEST_TIMEOUT;
+                usart_println_sync(get_main_usart(), "rx timeout");
+            }
+            break;
+        case OBD2_REQUEST_OK:
+            status = 0;
+            retval = 1;
+            break;
+        case OBD2_REQUEST_TIMEOUT:
+        case OBD2_REQUEST_ERROR:
+            can_rx.cmd = CMD_ABORT;
+            can_tx.cmd = CMD_ABORT;
+            can_cmd(&can_rx);
+            can_cmd(&can_tx);
+            status = 0;
+            retval = 1;
+            break;
+        default:
+            status = OBD2_REQUEST_ERROR;
+            break;
     }
+
+    return retval;
 }
 
-void obd2_write(uint8_t service_number, uint8_t pid_code, uint8_t A, uint8_t B, uint8_t C, uint8_t D) {
-    if (service_number != 0x41) {
-        return;
-    }
-
-    for (uint8_t i = 0; i < OBD2_PIDS; i++) {
-        if (pids[i]->pid_code == pid_code) {
-            pids[i]->A = A;
-            pids[i]->B = B;
-            pids[i]->C = C;
-            pids[i]->D = D;
-            pids[i]->timestamp = millis();
-            pids[i]->status = OBD2_PID_OK;
-            return;
-        }
-    }
+void obd2_loop(void) {
+    uint8_t val = obd2_reqloop(05);
 }
 
-void obd2_abort(uint8_t pid_code) {
-    for (uint8_t i = 0; i < OBD2_PIDS; i++) {
-        if (pids[i]->pid_code == pid_code) {
-            pids[i]->status = OBD2_PID_OK;
-            return;
-        }
-    }
-}
-
-uint8_t obd2_getnext_pid_code(void) {
-    for (uint8_t i = 0; i < OBD2_PIDS; i++) {
-        if (pids[i]->status == OBD2_PID_NODATA || pids[i]->status == OBD2_PID_OK) {
-            return pids[i]->pid_code;
-        }
-    }
-    return 0;
-}
-
-uint8_t obd2_request_sync(obd2_request_t *req) {
-    if (req->timeout == 0) {
-        req->timeout = OBD2_DEFAULT_TIMEOUT;
-    }
-
+uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
     uint8_t response_buffer[8];
     st_cmd_t response_msg;
     response_msg.status = 0;
@@ -186,8 +157,8 @@ uint8_t obd2_request_sync(obd2_request_t *req) {
 
     for (uint8_t i = 0; i < 8; i++) { tx_remote_buffer[i] = 0; }
     tx_remote_buffer[0] = 2;
-    tx_remote_buffer[1] = req->service_number;
-    tx_remote_buffer[2] = req->pid_code;
+    tx_remote_buffer[1] = service_number;
+    tx_remote_buffer[2] = pid_code;
 
     response_msg.id.std = OBD2_RX_IDE; // This message object only accepts frames from Target IDs (0x80) to (0x80 + NB_TARGET)
     response_msg.idmsk.std = OBD2_RX_IDMSK; // This message object only accepts frames from Target IDs (0x80) to (0x80 + NB_TARGET)
@@ -209,7 +180,7 @@ uint8_t obd2_request_sync(obd2_request_t *req) {
     while(can_get_status(&tx_remote_msg) == CAN_STATUS_NOT_COMPLETED); // Wait for Tx to complete
 
     uint8_t response_status;
-    for (uint16_t i = 0; i < req->timeout && (response_status = can_get_status(&response_msg)) == CAN_STATUS_NOT_COMPLETED; i++) {
+    for (uint16_t i = 0; i < OBD2_DEFAULT_TIMEOUT && (response_status = can_get_status(&response_msg)) == CAN_STATUS_NOT_COMPLETED; i++) {
         _delay_ms(1);
     }
 
@@ -217,14 +188,7 @@ uint8_t obd2_request_sync(obd2_request_t *req) {
     if (response_status == CAN_STATUS_NOT_COMPLETED) {
         return OBD2_REQUEST_TIMEOUT;
     } else if (response_status == CAN_STATUS_COMPLETED) {
-        uint8_t service_number = response_msg.pt_data[1];
-        uint8_t pid_code = response_msg.pt_data[2];
-        if (service_number == req->service_number + 0x40 && pid_code == req->pid_code) {
-            req->response[0] = response_msg.pt_data[3];
-            req->response[1] = response_msg.pt_data[4];
-            req->response[2] = response_msg.pt_data[5];
-            req->response[3] = response_msg.pt_data[6];
-        }
+        obd2_handle(response_msg.pt_data);
         return OBD2_REQUEST_OK;
     } else {
         // If no response is received in 50ms, send abort-frame
@@ -234,13 +198,13 @@ uint8_t obd2_request_sync(obd2_request_t *req) {
     }
 }
 
-void pid_request(void) {
-    obd2_request_t req;
-    req.service_number = 1;
-    req.pid_code = 0;
-    req.status = OBD2_REQUEST_NEW;
-
-    uint8_t res = obd2_request_sync(&req);
-
-    usart_send_sync(&usart0, res);
-}
+//void pid_request(void) {
+//    obd2_request_t req;
+//    req.service_number = 1;
+//    req.pid_code = 0;
+//    req.status = OBD2_REQUEST_NEW;
+//
+//    uint8_t res = obd2_request_sync(&req);
+//
+//    usart_send_sync(&usart0, res);
+//}

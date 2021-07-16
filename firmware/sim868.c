@@ -407,9 +407,11 @@ void sim868_loop(void) {
     }
     if (loopStatus == SIM868_LOOP_AWAIT && (millis() - watchdog) > 3000) {
         loopStatus = SIM868_LOOP_INIT;
+        watchdog = millis();
     }
     if (loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
         loopStatus = SIM868_LOOP_INIT;
+        watchdog = millis();
     }
 
     switch (loopStatus) {

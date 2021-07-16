@@ -3,7 +3,6 @@
 #include "usart_lib.h"
 // Library from example "CAN ATmega32M1" http://www.hpinfotech.ro/cvavr-examples.html | https://forum.digikey.com/t/can-example-atmega32m1-stk600/13039
 // but original Atmel Library does not accessible by link http://www.atmel.com/tools/cansoftwarelibrary.aspx
-#include "canlib/can_lib.h"
 #include "obd2.h"
 #include "sim868.h"
 #include <stdio.h>
@@ -36,11 +35,9 @@ void init(void) {
     usart->rx_vec = usart_rx;
 
     usart_init(usart, 9600);
-    usart_println_sync(usart, "Start up firmware. Build 4");
-//#   ifdef CAN_ENABLE
-//    can_init(0);
-//    obd2_init();
-//#   endif
+    usart_println_sync(usart, "Start up firmware. Build 5");
+
+    obd2_init();
 
     sim868_init();
     sim868_httpUrl("http://dkotlyar.ru:8000/post_test");
@@ -48,11 +45,9 @@ void init(void) {
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
-//#   ifdef CAN_ENABLE
 //    obd2_loop();
-//#   endif
-
-    sim868_loop();
+//    sim868_loop();
+    obd2_request_sync(1, 05);
 
     static uint32_t lastStart = 0;
     uint32_t _millis = millis();
