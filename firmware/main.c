@@ -45,16 +45,48 @@ void init(void) {
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
-//    obd2_loop();
+    obd2_loop();
 //    sim868_loop();
-    obd2_request_sync(1, 05);
 
     static uint32_t lastStart = 0;
     uint32_t _millis = millis();
     if ((_millis - lastStart) > 5000) {
-        uint8_t status = sim868_status();
+//        obd2_request_sync(1, 0x00);
+//        obd2_request_sync(1, 0x20);
+//        obd2_request_sync(1, 0xA0);
+
+        char temp[5];
+        sprintf(temp, "%d", engine_coolant_temperature);
+        usart_print_sync(get_main_usart(), "Temperature: ");
+        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%u", obd2_get_runtime_since_engine_start());
+        usart_print_sync(get_main_usart(), "Run time: ");
+        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%u", engine_speed);
+        usart_print_sync(get_main_usart(), "Engine speed: ");
+        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%u", vehicle_speed);
+        usart_print_sync(get_main_usart(), "Vehicle speed: ");
+        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%u", distance_traveled_since_codes_cleared);
+        usart_print_sync(get_main_usart(), "Distance: ");
+        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%u", obd2_get_aprox_distance_traveled());
+        usart_print_sync(get_main_usart(), "Distance aprox: ");
+        usart_println_sync(get_main_usart(), temp);
+//        sprintf(temp, "%ld", fuel_level);
+//        usart_print_sync(get_main_usart(), "Fuel level: ");
+//        usart_println_sync(get_main_usart(), temp);
+//        sprintf(temp, "%ld", odometer);
+//        usart_print_sync(get_main_usart(), "Odometer: ");
+//        usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%ld", timestamp);
+        usart_print_sync(get_main_usart(), "Timestamp: ");
+        usart_println_sync(get_main_usart(), temp);
+
+//        uint8_t status = sim868_status();
 //        char status_str[3];
-//        sprintf(status_str, "%u", status);
+//        sprintf(status_str, "%ld", status);
 //        usart_print_sync(usart, "IMEI: ");
 //        usart_println_sync(usart, imei);
 //        usart_print_sync(usart, "GNSS: ");
