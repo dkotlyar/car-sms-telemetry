@@ -21,7 +21,7 @@ char* pUrl;
 uint8_t httpStatus = SIM868_HTTP_UNDEFINED;
 char fileName[8] = {0};
 char fileBuffer[255] = {0};
-char* httpBuffer = 0;
+char httpBuffer[255] = {0};
 
 char imei[20] = {0};
 char cgnurc[115] = {0};
@@ -355,11 +355,10 @@ void sim868_http_loop(void) {
 
         case 20:
             SIM868_async_wait();
-            if (httpBuffer != 0) {
+            if (httpBuffer[0] != 0) {
 //                usart_println_sync(get_main_usart(), "Send new http post");
-                uint16_t len = strlen(httpBuffer);
-                memcpy(fileBuffer, httpBuffer, len);
-                httpBuffer = 0;
+                strcpy(fileBuffer, httpBuffer);
+                httpBuffer[0] = 0;
                 ml_status = 7;
             } else {
 //                usart_println_sync(get_main_usart(), "Check failed today");
@@ -391,7 +390,7 @@ void sim868_http_loop(void) {
             ml_status = 7;
             break;
         case 23:
-            if (httpBuffer != 0) {
+            if (httpBuffer[0] != 0) {
                 ml_status = 20;
             }
             break;
@@ -536,5 +535,9 @@ void sim868_post(char* url, char *data) {
 }
 
 void sim868_post_async(char *data) {
-    httpBuffer = data;
+    if (httpBuffer[0] == 0) {
+        strcpy(httpBuffer, data);
+    } else {
+        // Пока что игнорим пакеты, если http буффер занят
+    }
 }

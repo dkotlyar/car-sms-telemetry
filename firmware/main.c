@@ -35,26 +35,23 @@ void init(void) {
     usart->rx_vec = usart_rx;
 
     usart_init(usart, 9600);
-    usart_println_sync(usart, "Start up firmware. Build 5");
 
     obd2_init();
 
     sim868_init();
-    sim868_httpUrl("http://dkotlyar.ru:8000/post_test");
+    sim868_httpUrl("http://dkotlyar.ru:8000/telemetry");
+
+    usart_println_sync(usart, "Start up firmware. Build 5");
 }
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
     obd2_loop();
-//    sim868_loop();
+    sim868_loop();
 
     static uint32_t lastStart = 0;
     uint32_t _millis = millis();
     if ((_millis - lastStart) > 5000) {
-//        obd2_request_sync(1, 0x00);
-//        obd2_request_sync(1, 0x20);
-//        obd2_request_sync(1, 0xA0);
-
         char temp[5];
         sprintf(temp, "%d", engine_coolant_temperature);
         usart_print_sync(get_main_usart(), "Temperature: ");
@@ -74,31 +71,20 @@ void loop(void) {
         sprintf(temp, "%u", obd2_get_aprox_distance_traveled());
         usart_print_sync(get_main_usart(), "Distance aprox: ");
         usart_println_sync(get_main_usart(), temp);
-//        sprintf(temp, "%ld", fuel_level);
-//        usart_print_sync(get_main_usart(), "Fuel level: ");
-//        usart_println_sync(get_main_usart(), temp);
-//        sprintf(temp, "%ld", odometer);
-//        usart_print_sync(get_main_usart(), "Odometer: ");
-//        usart_println_sync(get_main_usart(), temp);
         sprintf(temp, "%ld", timestamp);
         usart_print_sync(get_main_usart(), "Timestamp: ");
         usart_println_sync(get_main_usart(), temp);
+        sprintf(temp, "%ld", _millis);
+        usart_print_sync(get_main_usart(), "Millis: ");
+        usart_println_sync(get_main_usart(), temp);
+        usart_println_sync(get_main_usart(), "");
 
-//        uint8_t status = sim868_status();
-//        char status_str[3];
-//        sprintf(status_str, "%ld", status);
-//        usart_print_sync(usart, "IMEI: ");
-//        usart_println_sync(usart, imei);
-//        usart_print_sync(usart, "GNSS: ");
-//        usart_println_sync(usart, cgnurc);
-//        usart_print_sync(usart, "Status: ");
-//        usart_println_sync(usart, status_str);
         lastStart = _millis;
 
         char buf[255];
-        sprintf(buf, "{\"imei\":\"%s\",\"gps\":\"%s\"}", imei, cgnurc);
+        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"obd2_timestamp\":%lu,\"run_time\":%u,\"distance\":%lu}", _millis, imei, cgnurc,
+                timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled());
         sim868_post_async(buf);
-//        sim868_post("http://dkotlyar.ru:8000/post_test", buf);
     }
 #endif
 }

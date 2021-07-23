@@ -16,7 +16,7 @@
 #   error Unknown USART port.
 #endif
 
-#define SIM868_DEBUG
+//#define SIM868_DEBUG
 
 #define SIM868_BUFFER_LENGTH    255
 

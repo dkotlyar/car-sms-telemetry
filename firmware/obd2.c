@@ -286,8 +286,8 @@ uint16_t obd2_get_runtime_since_engine_start(void) {
     }
 }
 
-uint16_t obd2_get_aprox_distance_traveled(void) {
-    return (uint16_t)(aprox_distance_traveled / 1000000);
+uint32_t obd2_get_aprox_distance_traveled(void) {
+    return (uint32_t)(aprox_distance_traveled / 1000);
 }
 
 //void pid_request(void) {
