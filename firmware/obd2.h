@@ -38,7 +38,7 @@ void obd2_loop(void);
 uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code);
 //void pid_request(void);
 
-uint16_t obd2_get_aprox_distance_traveled(void);
+uint32_t obd2_get_aprox_distance_traveled(void);
 uint16_t obd2_get_runtime_since_engine_start(void);
 
 #endif //OBD_SCAN_OBD2_H
