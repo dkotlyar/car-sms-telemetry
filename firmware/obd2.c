@@ -14,7 +14,7 @@ uint8_t fuel_level;
 uint32_t odometer;
 uint16_t distance_traveled_since_codes_cleared;
 
-double aprox_distance_traveled = 0; // расстояние в мм
+uint32_t aprox_distance_traveled = 0; // расстояние в мм * 3.6
 uint32_t aprox_distance_traveled_lasttimestamp = 0;
 
 uint32_t engine_start_time = ~0;
@@ -51,7 +51,7 @@ void obd2_handle(uint8_t* pt_data) {
             vehicle_speed = payload[0];
             if (aprox_distance_traveled_lasttimestamp != 0) {
                 uint32_t delta_time = millis() - aprox_distance_traveled_lasttimestamp;
-                aprox_distance_traveled += ((double)vehicle_speed) * 1000 / 3600 * delta_time; // преобразуем скорость к величинам мм/мс
+                aprox_distance_traveled += vehicle_speed * delta_time; // преобразуем скорость к величинам 3.6*мм/мс
             }
             aprox_distance_traveled_lasttimestamp = millis();
             break;
@@ -181,9 +181,9 @@ void obd2_loop(void) {
         case 2:
             val = obd2_reqloop(OBD2_PID_ENGINE_SPEED);
             break;
-        case 3:
-            val = obd2_reqloop(OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED);
-            break;
+//        case 3:
+//            val = obd2_reqloop(OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED);
+//            break;
 //        case 2:
 //            val = obd2_reqloop(OBD2_PID_RUN_TIME_SINCE_ENGINE_START);
 //            break;
@@ -278,16 +278,19 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
     }
 }
 
-uint16_t obd2_get_runtime_since_engine_start(void) {
+uint32_t obd2_get_runtime_since_engine_start(void) {
     if (engine_start_time == ~0) {
         return 0;
     } else {
-        return (millis() - engine_start_time) / 1000;
+        return millis() - engine_start_time;
     }
 }
 
+// Возвращает количество условных единиц, пройденных автомобилем
+// Для рассчёта дистанции необходимо воспользоваться формулой:
+// DISTANCE_METERS = result / (3.6 * 1000)
 uint32_t obd2_get_aprox_distance_traveled(void) {
-    return (uint32_t)(aprox_distance_traveled / 1000);
+    return aprox_distance_traveled;
 }
 
 //void pid_request(void) {

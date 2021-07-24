@@ -28,6 +28,7 @@ char httpBuffer[255] = {0};
 
 char imei[20] = {0};
 char cgnurc[115] = {0};
+uint32_t cgnurc_timestamp = 0;
 
 void sim868_init(void) {
 #   if SIM868_USART == 0
@@ -131,6 +132,7 @@ void sim868_handle_buffer(void) {
     } else if (memcmp(bank, "+UGNSINF: ", 10) == 0) {
         memset(cgnurc, 0, 115);
         strcpy(cgnurc, bank + 10);
+        cgnurc_timestamp = millis();
     } else if (memcmp(bank, "+HTTPACTION: ", 13) == 0) {
         if (memcmp(bank + 15, "200", 3) == 0) {
             httpStatus = SIM868_HTTP_200;
@@ -398,7 +400,7 @@ void sim868_http_loop(void) {
     }
 }
 
-void sim868_loop(void) {
+void sim868_loop(uint8_t powersave) {
     sim868_handle_buffer();
 
     static uint32_t watchdog = 0;
@@ -428,14 +430,18 @@ void sim868_loop(void) {
             break;
         case SIM868_LOOP_GET_IMEI:
             SIM868_async_wait();
-//            usart_println_sync(get_main_usart(), "AT+GSN");
             status = SIM868_STATUS_WAIT_IMEI;
             sim868_putln("AT+GSN");
-//            sim868_enableGnss();
             loopStatus = SIM868_LOOP_ENABLE_GNSS_1;
             break;
         case SIM868_LOOP_ENABLE_GNSS_1:
             SIM868_async_wait();
+
+            if (powersave) {
+                loopStatus = SIM868_LOOP_POWERSAVE;
+                break;
+            }
+
             SIM868_busy();
             sim868_putln("AT+CGNSPWR=1");
             loopStatus = SIM868_LOOP_ENABLE_GNSS_2;
@@ -443,14 +449,36 @@ void sim868_loop(void) {
         case SIM868_LOOP_ENABLE_GNSS_2:
             SIM868_async_wait();
             SIM868_busy();
-            sim868_putln("AT+CGNSURC=5");
+            sim868_put("AT+CGNSURC=");
+            sim868_putln(SIM868_CGNURC);
             loopStatus = SIM868_LOOP_OK;
             break;
         case SIM868_LOOP_POWER_DOWN:
             status = SIM868_STATUS_OFF;
             break;
+        case SIM868_LOOP_POWERSAVE:
+            status = SIM868_STATUS_OFF;
+            if (!powersave) {
+                loopStatus = SIM868_LOOP_INIT;
+            }
+            break;
         case SIM868_LOOP_OK:
             sim868_http_loop();
+            if (powersave) {
+                loopStatus = SIM868_LOOP_DISABLE_GNSS_1;
+            }
+            break;
+        case SIM868_LOOP_DISABLE_GNSS_1:
+            SIM868_async_wait();
+            SIM868_busy();
+            sim868_putln("AT+CGNSURC=0");
+            loopStatus = SIM868_LOOP_DISABLE_GNSS_2;
+            break;
+        case SIM868_LOOP_DISABLE_GNSS_2:
+            SIM868_async_wait();
+            SIM868_busy();
+            sim868_putln("AT+CGNSPWR=0");
+            loopStatus = SIM868_LOOP_POWERSAVE;
             break;
         case SIM868_LOOP_AWAIT:
             break;

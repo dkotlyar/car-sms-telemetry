@@ -38,6 +38,9 @@
 #define SIM868_LOOP_GET_IMEI        5
 #define SIM868_LOOP_ENABLE_GNSS_1   6
 #define SIM868_LOOP_ENABLE_GNSS_2   7
+#define SIM868_LOOP_POWERSAVE       8
+#define SIM868_LOOP_DISABLE_GNSS_1  9
+#define SIM868_LOOP_DISABLE_GNSS_2  10
 
 #define SIM868_HTTP_UNDEFINED       0
 #define SIM868_HTTP_READY           1
@@ -46,15 +49,18 @@
 #define SIM868_HTTP_NETWORK_ERROR   4 // коды Http 60x - ошибка сети
 #define SIM868_HTTP_FAILED          5 // любые http коды отличные от 200
 
+#define SIM868_CGNURC               "1"
+
 extern char imei[20];
 extern char cgnurc[115];
+extern uint32_t cgnurc_timestamp;
 
 void sim868_init(void);
 uint8_t sim868_status(void);
 void sim868_receive(uint8_t data);
 usart_t* sim868_get_usart(void);
 void sim868_handle_buffer(void);
-void sim868_loop(void);
+void sim868_loop(uint8_t powersave);
 void sim868_enableGnss(void);
 void sim868_httpUrl(char* url);
 void sim868_post(char* url, char *data);

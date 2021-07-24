@@ -46,18 +46,31 @@ void init(void) {
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
+    uint32_t _millis = millis();
     obd2_loop();
-    sim868_loop();
+
+#ifdef POWERSAVE
+    static uint32_t lastEngineWorkTime = 0;
+    if (obd2_get_runtime_since_engine_start() > 0) {
+        lastEngineWorkTime = _millis;
+    }
+    uint8_t powersave = 0;
+    if ((_millis - lastEngineWorkTime) > 30000) {
+        powersave = 1;
+    }
+    sim868_loop(powersave);
+#else
+    sim868_loop(0);
+#endif
 
     static uint32_t lastStart = 0;
-    uint32_t _millis = millis();
     if ((_millis - lastStart) > 5000) {
-        if (sim868_status() == SIM868_STATUS_OK) {
-            char temp[5];
+        if (sim868_status() == SIM868_STATUS_OK || sim868_status() == SIM868_STATUS_OFF) {
+            char temp[12];
             sprintf(temp, "%d", engine_coolant_temperature);
             usart_print_sync(get_main_usart(), "Temperature: ");
             usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%u", obd2_get_runtime_since_engine_start());
+            sprintf(temp, "%lu", obd2_get_runtime_since_engine_start());
             usart_print_sync(get_main_usart(), "Run time: ");
             usart_println_sync(get_main_usart(), temp);
             sprintf(temp, "%u", engine_speed);
@@ -66,27 +79,36 @@ void loop(void) {
             sprintf(temp, "%u", vehicle_speed);
             usart_print_sync(get_main_usart(), "Vehicle speed: ");
             usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%u", distance_traveled_since_codes_cleared);
-            usart_print_sync(get_main_usart(), "Distance: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%u", obd2_get_aprox_distance_traveled());
+            sprintf(temp, "%lu", obd2_get_aprox_distance_traveled());
             usart_print_sync(get_main_usart(), "Distance aprox: ");
             usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%ld", timestamp);
+            sprintf(temp, "%lu", timestamp);
             usart_print_sync(get_main_usart(), "Timestamp: ");
             usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%ld", _millis);
+            sprintf(temp, "%lu", _millis);
             usart_print_sync(get_main_usart(), "Millis: ");
             usart_println_sync(get_main_usart(), temp);
+            if (_millis < 60000) {
+                usart_println_sync(get_main_usart(), "Run time less 1 minute");
+            }
             usart_println_sync(get_main_usart(), "");
         }
 
         lastStart = _millis;
 
+#ifndef POWERSAVE
+        if (obd2_get_runtime_since_engine_start() > 0) {
+#endif
         char buf[255];
-        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"obd2_timestamp\":%lu,\"run_time\":%u,\"distance\":%lu}", _millis, imei, cgnurc,
-                timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled());
+        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
+                     "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
+                _millis, imei, cgnurc, cgnurc_timestamp,
+                timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
+                engine_speed, vehicle_speed);
         sim868_post_async(buf);
+#ifndef POWERSAVE
+        }
+#endif
     }
 #endif
 }
