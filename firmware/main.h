@@ -31,6 +31,8 @@ usart_t* get_main_usart(void);
 
 #define CAN_BAUDRATE   500        // in kBit
 
+#define POWERSAVE
+
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
 #define LED_Pn		4
