@@ -16,8 +16,9 @@
 #   error Unknown USART port.
 #endif
 
-//#define SIM868_DEBUG
+#define SIM868_DEBUG
 
+#define SIM868_BUFFER_BANKS     4
 #define SIM868_BUFFER_LENGTH    255
 
 #define SIM868_STATUS_OK                0
@@ -38,11 +39,12 @@
 #define SIM868_LOOP_ENABLE_GNSS_1   6
 #define SIM868_LOOP_ENABLE_GNSS_2   7
 
-#define SIM868_HTTP_UNDEFINED   0
-#define SIM868_HTTP_READY       1
-#define SIM868_HTTP_PENDING     2
-#define SIM868_HTTP_200         3
-#define SIM868_HTTP_FAILED      4
+#define SIM868_HTTP_UNDEFINED       0
+#define SIM868_HTTP_READY           1
+#define SIM868_HTTP_PENDING         2
+#define SIM868_HTTP_200             3 // http 200
+#define SIM868_HTTP_NETWORK_ERROR   4 // коды Http 60x - ошибка сети
+#define SIM868_HTTP_FAILED          5 // любые http коды отличные от 200
 
 extern char imei[20];
 extern char cgnurc[115];

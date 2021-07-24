@@ -52,32 +52,34 @@ void loop(void) {
     static uint32_t lastStart = 0;
     uint32_t _millis = millis();
     if ((_millis - lastStart) > 5000) {
-        char temp[5];
-        sprintf(temp, "%d", engine_coolant_temperature);
-        usart_print_sync(get_main_usart(), "Temperature: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%u", obd2_get_runtime_since_engine_start());
-        usart_print_sync(get_main_usart(), "Run time: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%u", engine_speed);
-        usart_print_sync(get_main_usart(), "Engine speed: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%u", vehicle_speed);
-        usart_print_sync(get_main_usart(), "Vehicle speed: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%u", distance_traveled_since_codes_cleared);
-        usart_print_sync(get_main_usart(), "Distance: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%u", obd2_get_aprox_distance_traveled());
-        usart_print_sync(get_main_usart(), "Distance aprox: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%ld", timestamp);
-        usart_print_sync(get_main_usart(), "Timestamp: ");
-        usart_println_sync(get_main_usart(), temp);
-        sprintf(temp, "%ld", _millis);
-        usart_print_sync(get_main_usart(), "Millis: ");
-        usart_println_sync(get_main_usart(), temp);
-        usart_println_sync(get_main_usart(), "");
+        if (sim868_status() == SIM868_STATUS_OK) {
+            char temp[5];
+            sprintf(temp, "%d", engine_coolant_temperature);
+            usart_print_sync(get_main_usart(), "Temperature: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%u", obd2_get_runtime_since_engine_start());
+            usart_print_sync(get_main_usart(), "Run time: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%u", engine_speed);
+            usart_print_sync(get_main_usart(), "Engine speed: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%u", vehicle_speed);
+            usart_print_sync(get_main_usart(), "Vehicle speed: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%u", distance_traveled_since_codes_cleared);
+            usart_print_sync(get_main_usart(), "Distance: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%u", obd2_get_aprox_distance_traveled());
+            usart_print_sync(get_main_usart(), "Distance aprox: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%ld", timestamp);
+            usart_print_sync(get_main_usart(), "Timestamp: ");
+            usart_println_sync(get_main_usart(), temp);
+            sprintf(temp, "%ld", _millis);
+            usart_print_sync(get_main_usart(), "Millis: ");
+            usart_println_sync(get_main_usart(), temp);
+            usart_println_sync(get_main_usart(), "");
+        }
 
         lastStart = _millis;
 
