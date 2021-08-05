@@ -23,6 +23,8 @@ void usart_rx(uint8_t data) {
 
 void init(void) {
     SETBIT_1(LED_DDR, LED_Pn);
+    SETBIT_0(BTN_DDR, BTN_Pn);
+    SETBIT_1(SIM868_PWR_DDR, SIM868_PWR_Pn);
     LED_OFF();
 
     millis_init();
@@ -44,6 +46,27 @@ void init(void) {
 }
 
 void loop(void) {
+    static uint16_t keyPressed = 0;
+    static uint8_t pwrState = 0;
+    if (read_key()) {
+        if (keyPressed < 1000) {
+            keyPressed++;
+        } else if (1000 == keyPressed) {
+            pwrState = !pwrState;
+            keyPressed = ~0;
+        }
+    } else {
+        keyPressed = 0;
+    }
+
+    if (pwrState) {
+        LED_ON();
+        SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);
+    } else {
+        LED_OFF();
+        SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);
+    }
+
 #ifndef SIM868_USART_BRIDGE
     obd2_loop();
 //    sim868_loop();
