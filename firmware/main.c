@@ -23,6 +23,8 @@ void usart_rx(uint8_t data) {
 
 void init(void) {
     SETBIT_1(LED_DDR, LED_Pn);
+    SETBIT_0(BTN_DDR, BTN_Pn);
+    SETBIT_1(SIM868_PWR_DDR, SIM868_PWR_Pn);
     LED_OFF();
 
     millis_init();
@@ -37,14 +39,36 @@ void init(void) {
     usart_init(usart, 9600);
 
     obd2_init();
-
     sim868_init();
-    sim868_httpUrl("http://dkotlyar.ru:8000/telemetry");
 
     usart_println_sync(usart, "Start up firmware. Build 5");
+#ifdef SIM868_USART_BRIDGE
+    usart_println_sync(usart, "SIM868 Bridge mode");
+#endif
 }
 
 void loop(void) {
+    static uint16_t keyPressed = 0;
+    static uint8_t pwrState = 1;
+    if (read_key()) {
+        if (keyPressed < 1000) {
+            keyPressed++;
+        } else if (1000 == keyPressed) {
+            pwrState = !pwrState;
+            keyPressed = ~0;
+        }
+    } else {
+        keyPressed = 0;
+    }
+
+    if (pwrState) {
+        LED_ON();
+        SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);
+    } else {
+        LED_OFF();
+        SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);
+    }
+
 #ifndef SIM868_USART_BRIDGE
     uint32_t _millis = millis();
     obd2_loop();
