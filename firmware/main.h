@@ -17,8 +17,6 @@ usart_t* get_main_usart(void);
 #define SETBIT_1(reg, bit)          {reg |= (1<<(bit));}
 #define SETBIT_0(reg, bit)          {reg &= ~(1<<(bit));}
 #define GETBIT(reg, bit)            ((reg & (1<<bit))>0)
-#define MAX(a, b)                   ( (a)>(b) ? (a) : (b) )
-#define MIN(a, b)                   ( (a)<(b) ? (a) : (b) )
 
 // PROJECT SECTION
 
@@ -39,8 +37,9 @@ usart_t* get_main_usart(void);
 #define LED_Pn		4
 #define LED_ON()    {SETBIT_0(LED_PORT, LED_Pn);}
 #define LED_OFF()   {SETBIT_1(LED_PORT, LED_Pn);}
-#define blink()     {LED_ON();_delay_ms(50);LED_OFF();_delay_ms(50);}
+#define _blink()    {LED_ON();_delay_ms(50);LED_OFF();_delay_ms(50);}
 #define long_blink(){LED_ON();_delay_ms(400);LED_OFF();_delay_ms(250);}
+#define blink(n)    {for (int i=0;i<n;i++){_blink();}}
 
 #define BTN_DDR     DDRE
 #define BTN_PIN     PINE
@@ -50,5 +49,13 @@ usart_t* get_main_usart(void);
 #define SIM868_PWR_DDR  DDRA
 #define SIM868_PWR_PORT PORTA
 #define SIM868_PWR_Pn   0
+#define sim868_pwr_on() {SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);}
+#define sim868_pwr_off(){SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);}
+
+typedef enum {
+    POWER_OFF,
+    POWER_ON,
+    POWER_AUTOMATIC
+} powermode_t;
 
 #endif
