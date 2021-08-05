@@ -8,6 +8,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 #include "usart_lib.h"
 
 usart_t* get_main_usart(void);
@@ -40,5 +41,14 @@ usart_t* get_main_usart(void);
 #define LED_OFF()   {SETBIT_1(LED_PORT, LED_Pn);}
 #define blink()     {LED_ON();_delay_ms(50);LED_OFF();_delay_ms(50);}
 #define long_blink(){LED_ON();_delay_ms(400);LED_OFF();_delay_ms(250);}
+
+#define BTN_DDR     DDRE
+#define BTN_PIN     PINE
+#define BTN_Pn      5
+#define read_key()  (!(BTN_PIN & (1<<BTN_Pn)))
+
+#define SIM868_PWR_DDR  DDRA
+#define SIM868_PWR_PORT PORTA
+#define SIM868_PWR_Pn   0
 
 #endif
