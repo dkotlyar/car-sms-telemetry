@@ -8,6 +8,7 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 #include "usart_lib.h"
 
 usart_t* get_main_usart(void);
