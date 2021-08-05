@@ -413,13 +413,14 @@ void sim868_loop(uint8_t powersave) {
         loopStatus = SIM868_LOOP_INIT;
         watchdog = millis();
     }
-    if (loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
-        loopStatus = SIM868_LOOP_INIT;
-        watchdog = millis();
-    }
+//    if (!powersave && loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
+//        loopStatus = SIM868_LOOP_INIT;
+//        watchdog = millis();
+//    }
 
     switch (loopStatus) {
         case SIM868_LOOP_INIT:
+            sim868_pwr_on();
             SIM868_busy();
             sim868_putln("AT+CPIN?");
             loopStatus = SIM868_LOOP_AWAIT;
@@ -438,7 +439,7 @@ void sim868_loop(uint8_t powersave) {
             SIM868_async_wait();
 
             if (powersave) {
-                loopStatus = SIM868_LOOP_POWERSAVE;
+                loopStatus = SIM868_LOOP_DISABLE_POWER;
                 break;
             }
 
@@ -455,6 +456,10 @@ void sim868_loop(uint8_t powersave) {
             break;
         case SIM868_LOOP_POWER_DOWN:
             status = SIM868_STATUS_OFF;
+            sim868_pwr_off();
+            if (!powersave) {
+                loopStatus = SIM868_LOOP_INIT;
+            }
             break;
         case SIM868_LOOP_POWERSAVE:
             status = SIM868_STATUS_OFF;
@@ -478,7 +483,13 @@ void sim868_loop(uint8_t powersave) {
             SIM868_async_wait();
             SIM868_busy();
             sim868_putln("AT+CGNSPWR=0");
-            loopStatus = SIM868_LOOP_POWERSAVE;
+            loopStatus = SIM868_LOOP_DISABLE_POWER;
+            break;
+        case SIM868_LOOP_DISABLE_POWER:
+            SIM868_async_wait();
+            SIM868_busy();
+            sim868_putln("AT+CPOWD=1");
+            loopStatus = SIM868_LOOP_AWAIT;
             break;
         case SIM868_LOOP_AWAIT:
             break;
@@ -489,15 +500,11 @@ void sim868_loop(uint8_t powersave) {
 }
 
 void sim868_enableGnss(void) {
-//    usart_println_sync(get_main_usart(), "enable gnss wait");
     SIM868_wait();
-//    usart_println_sync(get_main_usart(), "AT+CGNSPWR=1");
     sim868_putln("AT+CGNSPWR=1");
     status = SIM868_STATUS_BUSY;
 
-//    usart_println_sync(get_main_usart(), "enable cgnsurc wait");
     SIM868_wait();
-//    usart_println_sync(get_main_usart(), "AT+CGNSURC=2");
     sim868_putln("AT+CGNSURC=2");
     status = SIM868_STATUS_BUSY;
 }

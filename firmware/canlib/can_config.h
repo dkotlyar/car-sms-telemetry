@@ -32,5 +32,6 @@
 
 //_____ I N C L U D E S ________________________________________________________
 #include "../main.h"
+#include "../utils.h"
 
 #endif  // _CAN_CONFIG_H_
