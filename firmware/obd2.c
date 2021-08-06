@@ -51,8 +51,8 @@ void obd2_handle(uint8_t* pt_data) {
             break;
         case OBD2_PID_VEHICLE_SPEED:
             vehicle_speed = payload[0];
-            if (aprox_distance_traveled_lasttimestamp != 0) {
-                uint32_t delta_time = millis() - aprox_distance_traveled_lasttimestamp;
+            uint32_t delta_time = millis() - aprox_distance_traveled_lasttimestamp;
+            if (aprox_distance_traveled_lasttimestamp != 0 && delta_time < 5000) {
                 aprox_distance_traveled += vehicle_speed * delta_time; // преобразуем скорость к величинам 3.6*мм/мс
             }
             aprox_distance_traveled_lasttimestamp = millis();
@@ -282,6 +282,8 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
 
 uint32_t obd2_get_runtime_since_engine_start(void) {
     if (engine_start_time == ~0) {
+        return 0;
+    } else if ((millis() - timestamp) > 5000) {
         return 0;
     } else {
         return millis() - engine_start_time;
