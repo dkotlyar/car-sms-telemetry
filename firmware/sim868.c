@@ -197,6 +197,7 @@ void sim868_http_loop(void) {
     char lens[6] = {0};
 
     static uint32_t watchdog = 0;
+    static uint32_t httpTimeout = 0;
     static uint8_t prev_ml_status = 0;
     if (prev_ml_status != ml_status) {
         watchdog = millis();
@@ -211,7 +212,7 @@ void sim868_http_loop(void) {
         rec_buffer_ignore_message = 0;
         rec_buffer_bank_write = 0;
         rec_buffer_bank_read = 0;
-        loopStatus = SIM868_LOOP_POWER_DOWN;
+        rec_buffer_index = 0;
     }
 
     switch (ml_status) {
@@ -313,11 +314,16 @@ void sim868_http_loop(void) {
             status = SIM868_STATUS_BUSY;
             httpStatus = SIM868_HTTP_PENDING;
             sim868_putln("AT+HTTPACTION=1");
+            httpTimeout = millis();
             ml_status++;
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+5:
             SIM868_async_wait();
             if (status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+6; httpStatus = SIM868_HTTP_NETWORK_ERROR; }
+            if ((millis() - httpTimeout) > 30000) {
+                httpStatus = SIM868_HTTP_NETWORK_ERROR;
+                usart_println_sync(get_main_usart(), "Http timeout");
+            }
             if (httpStatus == SIM868_HTTP_PENDING) {break;}
             status = SIM868_STATUS_BUSY;
             sim868_putln("AT+HTTPTERM");
@@ -412,6 +418,7 @@ void sim868_loop(uint8_t powersave) {
     if (loopStatus == SIM868_LOOP_AWAIT && (millis() - watchdog) > 3000) {
         loopStatus = SIM868_LOOP_INIT;
         watchdog = millis();
+        usart_println_sync(get_main_usart(), "sim loop: watchdog");
     }
 //    if (!powersave && loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
 //        loopStatus = SIM868_LOOP_INIT;
