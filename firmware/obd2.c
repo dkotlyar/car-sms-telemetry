@@ -26,6 +26,8 @@ st_cmd_t can_tx;
 uint8_t obd_rx_buffer[8];
 uint8_t obd_tx_buffer[8];
 
+extern usart_t * main_usart;
+
 void obd2_init(void) {
     can_init(0);
     can_rx.pt_data = &obd_rx_buffer[0];
@@ -246,31 +248,31 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
 
     // If response is received
     if (response_status == CAN_STATUS_NOT_COMPLETED) {
-        usart_println_sync(get_main_usart(), "Request Timeout");
+        usart_println_sync(main_usart, "Request Timeout");
         return OBD2_REQUEST_TIMEOUT;
     } else if (response_status == CAN_STATUS_COMPLETED) {
         char temp[5];
         sprintf(temp, "%X", response_msg.pt_data[1]);
-        usart_print_sync(get_main_usart(), "Service: ");
-        usart_println_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, "Service: ");
+        usart_println_sync(main_usart, temp);
         sprintf(temp, "%X", response_msg.pt_data[2]);
-        usart_print_sync(get_main_usart(), "PID: ");
-        usart_println_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, "PID: ");
+        usart_println_sync(main_usart, temp);
         sprintf(temp, "%X", response_msg.pt_data[3]);
-        usart_print_sync(get_main_usart(), "Payload: ");
-        usart_print_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, "Payload: ");
+        usart_print_sync(main_usart, temp);
         sprintf(temp, "%X", response_msg.pt_data[4]);
-        usart_print_sync(get_main_usart(), " ");
-        usart_print_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, " ");
+        usart_print_sync(main_usart, temp);
         sprintf(temp, "%X", response_msg.pt_data[5]);
-        usart_print_sync(get_main_usart(), " ");
-        usart_print_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, " ");
+        usart_print_sync(main_usart, temp);
         sprintf(temp, "%X", response_msg.pt_data[6]);
-        usart_print_sync(get_main_usart(), " ");
-        usart_println_sync(get_main_usart(), temp);
+        usart_print_sync(main_usart, " ");
+        usart_println_sync(main_usart, temp);
         return OBD2_REQUEST_OK;
     } else {
-        usart_println_sync(get_main_usart(), "Request Error");
+        usart_println_sync(main_usart, "Request Error");
         // If no response is received in 50ms, send abort-frame
         response_msg.cmd = CMD_ABORT;
         while (can_cmd(&response_msg) != CAN_CMD_ACCEPTED);
