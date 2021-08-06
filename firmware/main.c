@@ -8,19 +8,34 @@
 #include <stdio.h>
 #include "utils.h"
 
-usart_t *usart;
+usart_t * main_usart;
 uint8_t usart_rx_buffer;
+extern usart_t * sim868_usart;
 powermode_t pwrMode;
-
-usart_t* get_main_usart(void) {
-    return usart;
-}
 
 void usart_rx(uint8_t data) {
 #ifdef SIM868_USART_BRIDGE
-    usart_send_sync(usart, data); // echo
-    usart_send_sync(sim868_get_usart(), data);
+    usart_send_sync(main_usart, data); // echo
+    usart_send_sync(sim868_usart, data);
 #endif
+}
+
+void setPowerMode(powermode_t pm) {
+    pwrMode = pm;
+    switch (pwrMode) {
+        case POWER_ON:
+            blink(2);
+            usart_println_sync(main_usart, "Power mode: ON");
+            break;
+        case POWER_AUTOMATIC:
+            blink(3);
+            usart_println_sync(main_usart, "Power mode: AUTOMATIC");
+        default:
+            pwrMode = POWER_OFF;
+            blink(1);
+            usart_println_sync(main_usart, "Power mode: OFF");
+            break;
+    }
 }
 
 void init(void) {
@@ -32,28 +47,28 @@ void init(void) {
     millis_init();
 
 #   if MAIN_USART == 0
-    usart = &usart0;
+    main_usart = &usart0;
 #   elif MAIN_USART == 1
-    usart = &usart1;
+    main_usart = &usart1;
 #   endif
-    usart->rx_vec = usart_rx;
+    main_usart->rx_vec = usart_rx;
 
-    usart_init(usart, 9600);
+    usart_init(main_usart, 9600);
 
     obd2_init();
     sim868_init();
     sim868_httpUrl("http://dkotlyar.ru:8000/telemetry");
 
-    usart_println_sync(usart, "Start up firmware. Build 5");
+    usart_println_sync(main_usart, "Start up firmware. Build 6");
 #ifdef SIM868_USART_BRIDGE
-    usart_println_sync(usart, "SIM868 Bridge mode");
+    usart_println_sync(main_usart, "SIM868 Bridge mode");
 #endif
-    pwrMode = POWER_AUTOMATIC;
-    blink(3);
-    usart_println_sync(usart, "Power mode: AUTOMATIC");
+
+    setPowerMode(POWER_ON);
 }
 
 void loop(void) {
+#ifndef SIM868_USART_BRIDGE
     static uint16_t keyPressed = 0;
     if (read_key()) {
         if (keyPressed < 1000) {
@@ -61,19 +76,13 @@ void loop(void) {
         } else if (1000 == keyPressed) {
             switch (pwrMode) {
                 case POWER_OFF:
-                    pwrMode = POWER_ON;
-                    blink(2);
-                    usart_println_sync(usart, "Power mode: ON");
+                    setPowerMode(POWER_ON);
                     break;
                 case POWER_ON:
-                    pwrMode = POWER_AUTOMATIC;
-                    blink(3);
-                    usart_println_sync(usart, "Power mode: AUTOMATIC");
+                    setPowerMode(POWER_AUTOMATIC);
                     break;
                 default:
-                    pwrMode = POWER_OFF;
-                    blink(1);
-                    usart_println_sync(usart, "Power mode: OFF");
+                    setPowerMode(POWER_OFF);
                     break;
             }
             keyPressed = ~0;
@@ -82,7 +91,6 @@ void loop(void) {
         keyPressed = 0;
     }
 
-#ifndef SIM868_USART_BRIDGE
     uint32_t _millis = millis();
     obd2_loop();
     static ptimer_t pston;
@@ -102,46 +110,15 @@ void loop(void) {
 
     sim868_loop(powersave);
 
-    if (pton(&telemetryTon, 1, 5000)) {
+    if (!powersave && pton(&telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
         pTimerReset(&telemetryTon);
-        if (sim868_status() == SIM868_STATUS_OK || sim868_status() == SIM868_STATUS_OFF) {
-            char temp[12];
-            sprintf(temp, "%d", engine_coolant_temperature);
-            usart_print_sync(get_main_usart(), "Temperature: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%lu", obd2_get_runtime_since_engine_start());
-            usart_print_sync(get_main_usart(), "Run time: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%u", engine_speed);
-            usart_print_sync(get_main_usart(), "Engine speed: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%u", vehicle_speed);
-            usart_print_sync(get_main_usart(), "Vehicle speed: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%lu", obd2_get_aprox_distance_traveled());
-            usart_print_sync(get_main_usart(), "Distance aprox: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%lu", timestamp);
-            usart_print_sync(get_main_usart(), "Timestamp: ");
-            usart_println_sync(get_main_usart(), temp);
-            sprintf(temp, "%lu", _millis);
-            usart_print_sync(get_main_usart(), "Millis: ");
-            usart_println_sync(get_main_usart(), temp);
-            if (_millis < 60000) {
-                usart_println_sync(get_main_usart(), "Run time less 1 minute");
-            }
-            usart_println_sync(get_main_usart(), "");
-        }
-
-        if (!powersave && obd2_get_runtime_since_engine_start() > 0) {
-            char buf[255];
-            sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
-                         "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
-                    _millis, imei, cgnurc, cgnurc_timestamp,
-                    timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
-                    engine_speed, vehicle_speed);
-            sim868_post_async(buf);
-        }
+        char buf[255];
+        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
+                     "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
+                _millis, imei, cgnurc, cgnurc_timestamp,
+                timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
+                engine_speed, vehicle_speed);
+        sim868_post_async(buf);
     }
 #endif
 }

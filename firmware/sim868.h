@@ -27,6 +27,7 @@
 #define SIM868_STATUS_WAIT_FILENAME     3
 #define SIM868_STATUS_WAIT_FILECONTENT  4
 #define SIM868_STATUS_WAIT_FILEINPUT    5
+#define SIM868_STATUS_WAIT_BUFFERINDEX  6
 #define SIM868_STATUS_OFF               254
 #define SIM868_STATUS_BUSY              255
 
@@ -42,6 +43,8 @@
 #define SIM868_LOOP_DISABLE_GNSS_1  9
 #define SIM868_LOOP_DISABLE_GNSS_2  10
 #define SIM868_LOOP_DISABLE_POWER   11
+#define SIM868_LOOP_MKBUFFER        12
+#define SIM868_LOOP_READBUFFERINDEX 13
 
 #define SIM868_HTTP_UNDEFINED       0
 #define SIM868_HTTP_READY           1
@@ -52,6 +55,9 @@
 
 #define SIM868_CGNURC               "1"
 
+#define SIM868_BUFFER_LOCK          (1<<0)
+#define SIM868_HTTP_LOCK            (1<<1)
+
 extern char imei[20];
 extern char cgnurc[115];
 extern uint32_t cgnurc_timestamp;
@@ -59,7 +65,6 @@ extern uint32_t cgnurc_timestamp;
 void sim868_init(void);
 uint8_t sim868_status(void);
 void sim868_receive(uint8_t data);
-usart_t* sim868_get_usart(void);
 void sim868_handle_buffer(void);
 void sim868_loop(uint8_t powersave);
 void sim868_enableGnss(void);
@@ -69,6 +74,6 @@ void sim868_post_async(char *data);
 
 #define SIM868_wait() {while (status != SIM868_STATUS_OK && status != SIM868_STATUS_ERROR) {_delay_ms(1);}}
 #define SIM868_async_wait() {if (status != SIM868_STATUS_OK && status != SIM868_STATUS_ERROR) {break;}}
-#define SIM868_busy() { status = SIM868_STATUS_BUSY; }
+#define SIM868_busy() { status = SIM868_STATUS_BUSY; lastReceiveTimestamp = millis();}
 
 #endif //FIRMWARE_SIM868_H

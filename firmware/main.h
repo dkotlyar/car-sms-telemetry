@@ -11,8 +11,6 @@
 #include <avr/wdt.h>
 #include "usart_lib.h"
 
-usart_t* get_main_usart(void);
-
 #define SETBIT(reg, bit, value)     {if (value) {SETBIT_1(reg, bit)} else {SETBIT_0(reg, bit)}}
 #define SETBIT_1(reg, bit)          {reg |= (1<<(bit));}
 #define SETBIT_0(reg, bit)          {reg &= ~(1<<(bit));}
