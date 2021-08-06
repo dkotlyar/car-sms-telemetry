@@ -42,14 +42,15 @@ void init(void) {
 
     obd2_init();
     sim868_init();
+    sim868_httpUrl("http://dkotlyar.ru:8000/telemetry");
 
     usart_println_sync(usart, "Start up firmware. Build 5");
 #ifdef SIM868_USART_BRIDGE
     usart_println_sync(usart, "SIM868 Bridge mode");
 #endif
-    pwrMode = POWER_OFF;
-    blink(1);
-    usart_println_sync(usart, "Power mode: OFF");
+    pwrMode = POWER_AUTOMATIC;
+    blink(3);
+    usart_println_sync(usart, "Power mode: AUTOMATIC");
 }
 
 void loop(void) {
@@ -88,7 +89,6 @@ void loop(void) {
     static ptimer_t telemetryTon;
 
     uint8_t powersave = 0;
-
 
     if (pton(&pston, 0 == obd2_get_runtime_since_engine_start(), 30000)) {
         powersave = 1;
