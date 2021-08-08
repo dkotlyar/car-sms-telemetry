@@ -64,14 +64,14 @@ void usart_send_sync(usart_t *usart, uint8_t data) {
 }
 #pragma clang diagnostic pop
 
-void usart_print_sync(usart_t *usart, char *str) {
+void usart_print_sync(usart_t *usart, const char *str) {
     while (*str != 0) {
         usart_send_sync(usart, *str);
         str++;
     }
 }
 
-void usart_println_sync(usart_t *usart, char *str) {
+void usart_println_sync(usart_t *usart, const char *str) {
     usart_print_sync(usart, str);
     usart_send_sync(usart, '\r');
     usart_send_sync(usart, '\n');

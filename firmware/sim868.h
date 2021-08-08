@@ -16,10 +16,9 @@
 #   error Unknown USART port.
 #endif
 
-#define SIM868_DEBUG
+//#define SIM868_DEBUG
 
 #define SIM868_BUFFER_BANKS     4
-#define SIM868_BUFFER_LENGTH    255
 
 #define SIM868_STATUS_OK                200
 #define SIM868_STATUS_ERROR             1
@@ -64,7 +63,7 @@ void sim868_init(void);
 void sim868_receive(uint8_t data);
 void sim868_handle_buffer(void);
 void sim868_loop(uint8_t powersave);
-void sim868_post_async(char *data);
+void sim868_post_async(const char *data);
 
 #define SIM868_wait() {while (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {_delay_ms(1);}}
 #define SIM868_async_wait() {if (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {break;}}
