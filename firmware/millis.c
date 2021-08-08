@@ -1,7 +1,7 @@
 #include "main.h"
 #include "millis.h"
 
-uint32_t _millis = 0;
+uint32_t _millis = 79418;
 uint32_t millis(void) {
     return _millis;
 }
@@ -17,9 +17,10 @@ void millis_init(void) {
     TCNT0 = 0x00;
     OCR0A = ((F_CPU / 64) / MILLIS_TIMER_FREQ) - 1;
     TIMSK0 |= (1<<OCIE0A);
+    _millis = 0;
 }
 ISR(TIMER0_COMP_vect) {
-        _millis++;
+    _millis++;
 }
 #elif defined(__AVR_ATmega128__)
 void millis_init(void) {
@@ -30,8 +31,9 @@ void millis_init(void) {
     TCNT0 = 0x00;
     OCR0 = ((F_CPU / 64) / MILLIS_TIMER_FREQ) - 1;
     TIMSK |= (1<<OCIE0);
+    _millis = 0;
 }
 ISR(TIMER0_COMP_vect) {
-        _millis++;
+    _millis++;
 }
 #endif
