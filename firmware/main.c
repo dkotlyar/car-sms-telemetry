@@ -30,6 +30,7 @@ void setPowerMode(powermode_t pm) {
         case POWER_AUTOMATIC:
             blink(3);
             usart_println_sync(main_usart, "Power mode: AUTOMATIC");
+            break;
         default:
             pwrMode = POWER_OFF;
             blink(1);
@@ -95,6 +96,7 @@ void loop(void) {
     obd2_loop();
     static ptimer_t pston;
     static ptimer_t telemetryTon;
+    static ptimer_t obdTon;
 
     uint8_t powersave = 0;
 
@@ -109,6 +111,18 @@ void loop(void) {
     }
 
     sim868_loop(powersave);
+
+    if (pton(&obdTon, 1, 2000)) {
+        pTimerReset(&obdTon);
+        char temp[12];
+        usart_print_sync(main_usart, "> +OBD: ");
+        obd_log("%lu", millis()); usart_print_sync(main_usart, ",");
+        obd_log("%d", engine_coolant_temperature); usart_print_sync(main_usart, ",");
+        obd_log("%lu", obd2_get_runtime_since_engine_start()); usart_print_sync(main_usart, ",");
+        obd_log("%u", engine_speed); usart_print_sync(main_usart, ",");
+        obd_log("%u", vehicle_speed); usart_print_sync(main_usart, ",");
+        obd_log("%lu", obd2_get_aprox_distance_traveled()); usart_println_sync(main_usart, "");
+    }
 
     if (!powersave && pton(&telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
         pTimerReset(&telemetryTon);
@@ -126,12 +140,18 @@ void loop(void) {
 int main(void) {
 	cli();
 	init();
+    wdt_enable(WDTO_1S);
+    if (MCUSR & (1<<WDRF)) {
+        usart_println_sync(main_usart, "SYSTEM: Watchdog reset vector");
+    }
+    MCUSR &= ~(1<<WDRF);
 	sei();
-	
+
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 	while(1) {
 	    loop();
+	    wdt_reset();
 	}
 #pragma clang diagnostic pop
 }
