@@ -296,14 +296,3 @@ uint32_t obd2_get_runtime_since_engine_start(void) {
 uint32_t obd2_get_aprox_distance_traveled(void) {
     return aprox_distance_traveled;
 }
-
-//void pid_request(void) {
-//    obd2_request_t req;
-//    req.service_number = 1;
-//    req.pid_code = 0;
-//    req.status = OBD2_REQUEST_NEW;
-//
-//    uint8_t res = obd2_request_sync(&req);
-//
-//    usart_send_sync(&usart0, res);
-//}
