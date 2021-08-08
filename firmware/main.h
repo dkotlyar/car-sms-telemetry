@@ -56,4 +56,6 @@ typedef enum {
     POWER_AUTOMATIC
 } powermode_t;
 
+#define obd_log(frmt, var) { sprintf(temp, frmt, var); usart_print_sync(main_usart, temp); }
+
 #endif
