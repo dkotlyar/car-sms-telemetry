@@ -58,7 +58,6 @@ void init(void) {
 
     obd2_init();
     sim868_init();
-    sim868_httpUrl("http://dkotlyar.ru:8000/telemetry");
 
     usart_println_sync(main_usart, "Start up firmware. Build 6");
 #ifdef SIM868_USART_BRIDGE

@@ -21,7 +21,7 @@
 #define SIM868_BUFFER_BANKS     4
 #define SIM868_BUFFER_LENGTH    255
 
-#define SIM868_STATUS_OK                0
+#define SIM868_STATUS_OK                200
 #define SIM868_STATUS_ERROR             1
 #define SIM868_STATUS_WAIT_IMEI         2
 #define SIM868_STATUS_WAIT_FILENAME     3
@@ -53,8 +53,6 @@
 #define SIM868_HTTP_NETWORK_ERROR   4 // коды Http 60x - ошибка сети
 #define SIM868_HTTP_FAILED          5 // любые http коды отличные от 200
 
-#define SIM868_CGNURC               "1"
-
 #define SIM868_BUFFER_LOCK          (1<<0)
 #define SIM868_HTTP_LOCK            (1<<1)
 
@@ -63,17 +61,13 @@ extern char cgnurc[115];
 extern uint32_t cgnurc_timestamp;
 
 void sim868_init(void);
-uint8_t sim868_status(void);
 void sim868_receive(uint8_t data);
 void sim868_handle_buffer(void);
 void sim868_loop(uint8_t powersave);
-void sim868_enableGnss(void);
-void sim868_httpUrl(char* url);
-void sim868_post(char* url, char *data);
 void sim868_post_async(char *data);
 
-#define SIM868_wait() {while (status != SIM868_STATUS_OK && status != SIM868_STATUS_ERROR) {_delay_ms(1);}}
-#define SIM868_async_wait() {if (status != SIM868_STATUS_OK && status != SIM868_STATUS_ERROR) {break;}}
-#define SIM868_busy() { status = SIM868_STATUS_BUSY; lastReceiveTimestamp = millis();}
+#define SIM868_wait() {while (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {_delay_ms(1);}}
+#define SIM868_async_wait() {if (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {break;}}
+#define SIM868_busy() { sim868_status = SIM868_STATUS_BUSY; lastCommandTransmitTimestamp = millis();}
 
 #endif //FIRMWARE_SIM868_H
