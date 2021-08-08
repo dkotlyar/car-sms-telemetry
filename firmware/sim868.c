@@ -18,11 +18,10 @@ uint8_t rec_buffer_bank_read = 0;
 uint8_t rec_buffer_ignore_message = 0;
 uint8_t rec_buffer[SIM868_BUFFER_BANKS][SIM868_BUFFER_LENGTH];
 
-uint8_t status = SIM868_STATUS_OK;
-uint8_t lock = 0;
-uint8_t loopStatus = SIM868_LOOP_INIT;
+uint8_t sim868_status = SIM868_STATUS_OK;
+uint8_t sim868_lock = 0;
+uint8_t sim868_loopStatus = SIM868_LOOP_INIT;
 
-char* pUrl;
 uint8_t httpStatus = SIM868_HTTP_UNDEFINED;
 uint16_t today_filebuffer_index = 0;
 char fileReadName[8] = {0};
@@ -33,7 +32,7 @@ char httpBuffer[255] = {0};
 uint8_t hasNewFile = 0;
 uint32_t httpTimeout = 0;
 
-uint32_t lastReceiveTimestamp = 0;
+uint32_t lastCommandTransmitTimestamp = 0;
 
 char imei[20] = {0};
 char cgnurc[115] = {0};
@@ -49,12 +48,15 @@ void sim868_init(void) {
     usart_init(sim868_usart, 9600);
 }
 
-uint8_t sim868_status(void) {
-    return status;
-}
-
+#ifdef SIM868_DEBUG
+uint8_t startmsg = 1;
+#endif
 void sim868_put(char* data) {
 #ifdef SIM868_DEBUG
+    if (startmsg) {
+        usart_print_sync(main_usart, "$ ");
+        startmsg = 0;
+    }
     usart_print_sync(main_usart, data);
 #endif
     usart_print_sync(sim868_usart, data);
@@ -62,7 +64,11 @@ void sim868_put(char* data) {
 
 void sim868_putln(char* data) {
 #ifdef SIM868_DEBUG
+    if (startmsg) {
+        usart_print_sync(main_usart, "$ ");
+    }
     usart_println_sync(main_usart, data);
+    startmsg = 1;
 #endif
     usart_println_sync(sim868_usart, data);
 }
@@ -116,26 +122,29 @@ void sim868_handle_buffer(void) {
         return;
     }
 
-    lastReceiveTimestamp = millis();
-    uint8_t *bank = rec_buffer[rec_buffer_bank_read];
+    cli();
+    uint8_t bank[255] = {0};
+    strcpy(bank, rec_buffer[rec_buffer_bank_read]);
     rec_buffer_bank_read++;
     if (rec_buffer_bank_read >= SIM868_BUFFER_BANKS) {
         rec_buffer_bank_read = 0;
     }
+    sei();
 
 #ifdef SIM868_DEBUG
+    usart_print_sync(main_usart, "> ");
     usart_println_sync(main_usart, bank);
 #endif
 
     if (memcmp(bank, "ERROR\0", 6) == 0) {
-        status = SIM868_STATUS_ERROR;
+        sim868_status = SIM868_STATUS_ERROR;
     } else if (memcmp(bank, "OK\0", 3) == 0) {
-        status = SIM868_STATUS_OK;
+        sim868_status = SIM868_STATUS_OK;
     } else if (memcmp(bank, "NORMAL POWER DOWN\0", 18) == 0) {
-        loopStatus = SIM868_LOOP_POWER_DOWN;
+        sim868_loopStatus = SIM868_LOOP_POWER_DOWN;
     } else if (memcmp(bank, "+CPIN: READY", 12) == 0) {
-        loopStatus = SIM868_LOOP_CPIN_READY;
-        status = SIM868_STATUS_OK;
+        sim868_loopStatus = SIM868_LOOP_CPIN_READY;
+        sim868_status = SIM868_STATUS_OK;
     } else if (memcmp(bank, "+UGNSINF: ", 10) == 0) {
         memset(cgnurc, 0, 115);
         strcpy(cgnurc, bank + 10);
@@ -148,21 +157,23 @@ void sim868_handle_buffer(void) {
         } else {
             httpStatus = SIM868_HTTP_FAILED;
         }
-        status = SIM868_STATUS_OK;
+        sim868_status = SIM868_STATUS_OK;
     } else if (memcmp(bank, "HTTPACTION: ", 12) == 0) {
         if (memcmp(bank + 14, "200", 3) == 0) {
             httpStatus = SIM868_HTTP_200;
+        } else if (memcmp(bank + 14, "60", 2) == 0) {
+            httpStatus = SIM868_HTTP_NETWORK_ERROR;
         } else {
             httpStatus = SIM868_HTTP_FAILED;
         }
-        status = SIM868_STATUS_OK;
+        sim868_status = SIM868_STATUS_OK;
     } else if (memcmp(bank, "+SAPBR 1: DEACT", 15) == 0) {
-        status = SIM868_STATUS_OK;
+        sim868_status = SIM868_STATUS_OK;
         httpStatus = SIM868_HTTP_UNDEFINED;
     } else if (memcmp(bank, "DOWNLOAD\0", 9) == 0) {
-        status = SIM868_STATUS_OK;
+        sim868_status = SIM868_STATUS_OK;
     } else {
-        switch (status) {
+        switch (sim868_status) {
             case SIM868_STATUS_WAIT_IMEI:
                 memset(imei, 0, 20);
                 strcpy(imei, bank);
@@ -183,7 +194,7 @@ void sim868_handle_buffer(void) {
                 SIM868_busy();
                 break;
             case SIM868_STATUS_WAIT_FILEINPUT:
-                status = SIM868_STATUS_OK;
+                sim868_status = SIM868_STATUS_OK;
                 break;
             default:
                 break;
@@ -208,44 +219,25 @@ void sim868_http_loop(void) {
     uint16_t len;
     char lens[6] = {0};
 
-//    static uint32_t watchdog = 0;
-//    static uint32_t httpTimeout = 0;
-//    static uint8_t prev_ml_status = 0;
-//    if (prev_ml_status != ml_status) {
-//        watchdog = millis();
-//    }
-//    prev_ml_status = ml_status;
-//    if (((millis() - watchdog) > 10000 && status == SIM868_STATUS_BUSY ||
-//            (millis() - watchdog) > 120000) && ml_status != SIM868_MAIN_LOOP_WAITFILE) {
-//        usart_println_sync(main_usart, "Http loop: watchdog");
-//        ml_status = 0;
-//        if (lock & SIM868_HTTP_LOCK) {
-//            status = SIM868_STATUS_ERROR;
-//            lock &= ~SIM868_HTTP_LOCK;
-//        }
-//        watchdog = millis();
-//        rec_buffer_ignore_message = 0;
-//        rec_buffer_bank_write = 0;
-//        rec_buffer_bank_read = 0;
-//        rec_buffer_index = 0;
-//    }
-
-    if (lock & ~SIM868_HTTP_LOCK) {
+    if (sim868_lock & ~SIM868_HTTP_LOCK) {
         return;
     }
 
     switch (ml_status) {
         case 0:
             SIM868_async_wait();
-            status = SIM868_STATUS_WAIT_FILENAME;
+            sim868_status = SIM868_STATUS_WAIT_FILENAME;
             fileReadName[0] = 0;
             sim868_putln("AT+FSLS=C:\\buffer\\");
             ml_status++;
             break;
         case 1:
             SIM868_async_wait();
+            if (sim868_status != SIM868_STATUS_OK) {
+                ml_status = 0;
+            } else
             if (fileReadName[0] != 0) {
-                status = SIM868_STATUS_WAIT_FILECONTENT;
+                sim868_status = SIM868_STATUS_WAIT_FILECONTENT;
                 sim868_put("AT+FSREAD=C:\\buffer\\");
                 sim868_put(fileReadName);
                 sim868_putln(",0,255,0");
@@ -283,13 +275,13 @@ void sim868_http_loop(void) {
             SIM868_async_wait();
             SIM868_busy();
             sim868_put("AT+HTTPPARA=URL,");
-            sim868_putln(pUrl);
+            sim868_putln(SIM868_TELEMETRY_URL);
             ml_status++;
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+3:
             SIM868_async_wait();
-            if (status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
-            lock |= SIM868_HTTP_LOCK;
+            if (sim868_status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
+            sim868_lock |= SIM868_HTTP_LOCK;
             len = strlen(fileReadBuffer);
             lens[0] = 0;
             sprintf(lens, "%u", len);
@@ -301,10 +293,10 @@ void sim868_http_loop(void) {
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+4:
             SIM868_async_wait();
-            if (status == SIM868_STATUS_ERROR) {
+            if (sim868_status == SIM868_STATUS_ERROR) {
                 ml_status = SIM868_MAIN_LOOP_HTTPINIT+7;
                 httpStatus = SIM868_HTTP_NETWORK_ERROR;
-                lock &= ~SIM868_HTTP_LOCK;
+                sim868_lock &= ~SIM868_HTTP_LOCK;
                 break;
             }
             SIM868_busy();
@@ -313,8 +305,8 @@ void sim868_http_loop(void) {
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+5:
             SIM868_async_wait();
-            lock &= ~SIM868_HTTP_LOCK;
-            if (status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
+            sim868_lock &= ~SIM868_HTTP_LOCK;
+            if (sim868_status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
             SIM868_busy();
             httpStatus = SIM868_HTTP_PENDING;
             sim868_putln("AT+HTTPACTION=1");
@@ -323,7 +315,7 @@ void sim868_http_loop(void) {
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+6:
             SIM868_async_wait();
-            if (status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
+            if (sim868_status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
             if ((millis() - httpTimeout) > 30000) {
                 httpStatus = SIM868_HTTP_NETWORK_ERROR;
                 usart_println_sync(main_usart, "HTTP TIMEOUT");
@@ -365,21 +357,7 @@ void sim868_buffer_loop(void) {
     char lens[6] = {0};
     char fileindex_str[6] = {0};
 
-    static uint32_t watchdog = 0;
-    static uint32_t httpTimeout = 0;
-    static uint8_t prev_state = 0;
-    if (prev_state != state) {
-        watchdog = millis();
-    }
-    prev_state = state;
-    if (state > 0 && (millis() - watchdog) > 10000 && status == SIM868_STATUS_BUSY) {
-        usart_println_sync(main_usart, "Buffer loop: watchdog");
-        state = 0;
-        status = SIM868_STATUS_ERROR;
-        watchdog = millis();
-    }
-
-    if (lock & ~SIM868_BUFFER_LOCK) {
+    if (sim868_lock & ~SIM868_BUFFER_LOCK) {
         return;
     }
 
@@ -393,7 +371,7 @@ void sim868_buffer_loop(void) {
             break;
         case 1:
             SIM868_async_wait();
-            lock |= SIM868_BUFFER_LOCK;
+            sim868_lock |= SIM868_BUFFER_LOCK;
             SIM868_busy();
             sim868_createFileName(today_filebuffer_index);
             today_filebuffer_index++;
@@ -403,11 +381,11 @@ void sim868_buffer_loop(void) {
             break;
         case 2:
             SIM868_async_wait();
-            if (status == SIM868_STATUS_ERROR) { state = 255; }
+            if (sim868_status == SIM868_STATUS_ERROR) { state = 255; }
             len = strlen(fileWriteBuffer);
             lens[0] = 0;
             sprintf(lens, "%u", len);
-            status = SIM868_STATUS_WAIT_FILEINPUT;
+            sim868_status = SIM868_STATUS_WAIT_FILEINPUT;
             sim868_put("AT+FSWRITE=C:\\buffer\\");
             sim868_put(fileWriteName);
             sim868_put(",0,");
@@ -430,7 +408,7 @@ void sim868_buffer_loop(void) {
             break;
         case 5:
             SIM868_async_wait();
-            status = SIM868_STATUS_WAIT_FILEINPUT;
+            sim868_status = SIM868_STATUS_WAIT_FILEINPUT;
             sprintf(fileindex_str, "%d", today_filebuffer_index);
             len = strlen(fileindex_str);
             sprintf(lens, "%u", len);
@@ -449,7 +427,7 @@ void sim868_buffer_loop(void) {
 
         case 255:
             state = 0;
-            lock &= ~SIM868_BUFFER_LOCK;
+            sim868_lock &= ~SIM868_BUFFER_LOCK;
             hasNewFile = 1;
             break;
     }
@@ -458,191 +436,123 @@ void sim868_buffer_loop(void) {
 void sim868_loop(uint8_t powersave) {
     sim868_handle_buffer();
 
-    if ((millis() - lastReceiveTimestamp) > 10000 && (status != SIM868_STATUS_OK && status != SIM868_STATUS_ERROR)) {
+    if ((millis() - lastCommandTransmitTimestamp) > 10000 &&
+        (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR && sim868_status != SIM868_STATUS_OFF)) {
         usart_println_sync(main_usart, "WATCHDOG");
-        status = SIM868_STATUS_ERROR;
+        sim868_status = SIM868_STATUS_ERROR;
     }
 
     static uint32_t watchdog = 0;
     static uint8_t prev_status = 0;
-    if (prev_status != loopStatus) {
+    if (prev_status != sim868_loopStatus) {
         watchdog = millis();
-        prev_status = loopStatus;
+        prev_status = sim868_loopStatus;
     }
-    if (loopStatus == SIM868_LOOP_AWAIT && (millis() - watchdog) > 3000) {
-        loopStatus = SIM868_LOOP_INIT;
+    if (sim868_loopStatus == SIM868_LOOP_AWAIT && (millis() - watchdog) > 3000) {
+        if (powersave) {
+            sim868_loopStatus = SIM868_LOOP_POWER_DOWN;
+        } else {
+            sim868_loopStatus = SIM868_LOOP_INIT;
+        }
         watchdog = millis();
     }
-    if (!powersave && loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
-        loopStatus = SIM868_LOOP_INIT;
+    if (!powersave && sim868_loopStatus == SIM868_LOOP_POWER_DOWN && (millis() - watchdog) > 60000) {
+        sim868_loopStatus = SIM868_LOOP_INIT;
         watchdog = millis();
     }
 
-    switch (loopStatus) {
+    switch (sim868_loopStatus) {
         case SIM868_LOOP_INIT:
             sim868_pwr_on();
             SIM868_busy();
             sim868_putln("AT+CPIN?");
-            loopStatus = SIM868_LOOP_AWAIT;
+            sim868_loopStatus = SIM868_LOOP_AWAIT;
             break;
         case SIM868_LOOP_CPIN_READY:
             imei[0] = 0;
-            loopStatus = SIM868_LOOP_GET_IMEI;
+            sim868_loopStatus = SIM868_LOOP_GET_IMEI;
             break;
         case SIM868_LOOP_GET_IMEI:
             SIM868_async_wait();
-            status = SIM868_STATUS_WAIT_IMEI;
+            sim868_status = SIM868_STATUS_WAIT_IMEI;
             sim868_putln("AT+GSN");
-            loopStatus = SIM868_LOOP_MKBUFFER;
+            sim868_loopStatus = SIM868_LOOP_MKBUFFER;
             break;
         case SIM868_LOOP_MKBUFFER:
             SIM868_async_wait();
             SIM868_busy();
             sim868_putln("AT+FSMKDIR=C:\\buffer\\");
-            loopStatus = SIM868_LOOP_READBUFFERINDEX;
+            sim868_loopStatus = SIM868_LOOP_READBUFFERINDEX;
             break;
         case SIM868_LOOP_READBUFFERINDEX:
             SIM868_async_wait();
-            status = SIM868_STATUS_WAIT_BUFFERINDEX;
+            sim868_status = SIM868_STATUS_WAIT_BUFFERINDEX;
             sim868_putln("AT+FSREAD=C:\\filebuffer_index,0,6,0");
-            loopStatus = SIM868_LOOP_ENABLE_GNSS_1;
+            sim868_loopStatus = SIM868_LOOP_ENABLE_GNSS_1;
             break;
         case SIM868_LOOP_ENABLE_GNSS_1:
             SIM868_async_wait();
 
             if (powersave) {
-                loopStatus = SIM868_LOOP_DISABLE_POWER;
+                sim868_loopStatus = SIM868_LOOP_DISABLE_POWER;
                 break;
             }
 
             SIM868_busy();
             sim868_putln("AT+CGNSPWR=1");
-            loopStatus = SIM868_LOOP_ENABLE_GNSS_2;
+            sim868_loopStatus = SIM868_LOOP_ENABLE_GNSS_2;
             break;
         case SIM868_LOOP_ENABLE_GNSS_2:
             SIM868_async_wait();
             SIM868_busy();
             sim868_put("AT+CGNSURC=");
             sim868_putln(SIM868_CGNURC);
-            loopStatus = SIM868_LOOP_OK;
+            sim868_loopStatus = SIM868_LOOP_OK;
             break;
         case SIM868_LOOP_POWER_DOWN:
-            status = SIM868_STATUS_OFF;
+            sim868_status = SIM868_STATUS_OFF;
             sim868_pwr_off();
             if (!powersave) {
-                loopStatus = SIM868_LOOP_INIT;
+                sim868_loopStatus = SIM868_LOOP_INIT;
             }
             break;
         case SIM868_LOOP_POWERSAVE:
-            status = SIM868_STATUS_OFF;
+            sim868_status = SIM868_STATUS_OFF;
             if (!powersave) {
-                loopStatus = SIM868_LOOP_INIT;
+                sim868_loopStatus = SIM868_LOOP_INIT;
             }
             break;
         case SIM868_LOOP_OK:
             sim868_buffer_loop();
             sim868_http_loop();
             if (powersave) {
-                loopStatus = SIM868_LOOP_DISABLE_GNSS_1;
+                sim868_loopStatus = SIM868_LOOP_DISABLE_GNSS_1;
             }
             break;
         case SIM868_LOOP_DISABLE_GNSS_1:
             SIM868_async_wait();
             SIM868_busy();
             sim868_putln("AT+CGNSURC=0");
-            loopStatus = SIM868_LOOP_DISABLE_GNSS_2;
+            sim868_loopStatus = SIM868_LOOP_DISABLE_GNSS_2;
             break;
         case SIM868_LOOP_DISABLE_GNSS_2:
             SIM868_async_wait();
             SIM868_busy();
             sim868_putln("AT+CGNSPWR=0");
-            loopStatus = SIM868_LOOP_DISABLE_POWER;
+            sim868_loopStatus = SIM868_LOOP_DISABLE_POWER;
             break;
         case SIM868_LOOP_DISABLE_POWER:
             SIM868_async_wait();
             SIM868_busy();
             sim868_putln("AT+CPOWD=1");
-            loopStatus = SIM868_LOOP_AWAIT;
+            sim868_loopStatus = SIM868_LOOP_AWAIT;
             break;
         case SIM868_LOOP_AWAIT:
             break;
         default:
-            loopStatus = SIM868_LOOP_INIT;
+            sim868_loopStatus = SIM868_LOOP_INIT;
             break;
     }
-}
-
-void sim868_enableGnss(void) {
-    SIM868_wait();
-    sim868_putln("AT+CGNSPWR=1");
-    SIM868_busy();
-
-    SIM868_wait();
-    sim868_putln("AT+CGNSURC=2");
-    SIM868_busy();
-}
-
-void sim868_httpUrl(char* url) {
-    pUrl = url;
-}
-
-void sim868_post(char* url, char *data) {
-    if (status == SIM868_STATUS_ERROR) {
-        status = SIM868_STATUS_OK;
-    }
-
-    SIM868_wait();
-    if (status == SIM868_STATUS_ERROR) return;
-//    usart_println_sync(main_usart, "AT+HTTPINIT");
-    sim868_putln("AT+HTTPINIT");
-    SIM868_busy();
-
-    SIM868_wait();
-    if (status == SIM868_STATUS_ERROR) return;
-//    usart_print_sync(main_usart, "AT+HTTPPARA=URL,");
-    sim868_put("AT+HTTPPARA=URL,");
-//    usart_println_sync(main_usart, url);
-    sim868_putln(url);
-    SIM868_busy();
-
-    SIM868_wait();
-    if (status == SIM868_STATUS_ERROR) return;
-    httpStatus = SIM868_HTTP_READY;
-
-    uint16_t len = strlen(data);
-    char lens[6] = {0};
-    sprintf(lens, "%d", len);
-
-    SIM868_wait();
-    if (status == SIM868_STATUS_ERROR) return;
-//    usart_print_sync(main_usart, "AT+HTTPDATA=");
-    sim868_put("AT+HTTPDATA=");
-//    usart_print_sync(main_usart, lens);
-    sim868_put(lens);
-//    usart_println_sync(main_usart, ",2000");
-    sim868_putln(",2000");
-    SIM868_busy();
-
-    SIM868_wait(); // Wait DOWNLOAD response
-    if (status == SIM868_STATUS_ERROR) return;
-    sim868_putln(data);
-    SIM868_busy();
-
-    SIM868_wait(); // Wait OK response
-    if (status == SIM868_STATUS_ERROR) return;
-//    usart_println_sync(main_usart, "AT+HTTPACTION=1");
-    sim868_putln("AT+HTTPACTION=1");
-    SIM868_busy();
-    httpStatus = SIM868_HTTP_PENDING;
-
-    while (httpStatus == SIM868_HTTP_PENDING) {_delay_ms(1);}
-//    usart_print_sync(main_usart, "HTTP RESULT: ");
-//    usart_println_sync(main_usart, httpStatus == SIM868_HTTP_200 ? "200" : "FAILED");
-    httpStatus = SIM868_HTTP_READY;
-
-//    usart_println_sync(main_usart, "AT+HTTPTERM");
-    sim868_putln("AT+HTTPTERM");
-    SIM868_busy();
 }
 
 void sim868_post_async(char *data) {
