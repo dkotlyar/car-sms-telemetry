@@ -7,6 +7,7 @@
 #include "sim868.h"
 #include <stdio.h>
 #include "utils.h"
+#include <string.h>
 
 usart_t * main_usart;
 uint8_t usart_rx_buffer;
@@ -125,7 +126,7 @@ void loop(void) {
 
     if (!powersave && pton(&telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
         pTimerReset(&telemetryTon);
-        char buf[255];
+        char buf[SIM868_CHARBUFFER_LENGTH];
         sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
                 _millis, imei, cgnurc, cgnurc_timestamp,

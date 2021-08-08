@@ -18,8 +18,8 @@ typedef struct {
 
 void usart_init(usart_t *usart, uint16_t baud);
 void usart_send_sync(usart_t *usart, uint8_t data);
-void usart_print_sync(usart_t *usart, char * str);
-void usart_println_sync(usart_t *usart, char * str);
+void usart_print_sync(usart_t *usart, const char * str);
+void usart_println_sync(usart_t *usart, const char * str);
 
 extern usart_t usart0;
 extern usart_t usart1;
