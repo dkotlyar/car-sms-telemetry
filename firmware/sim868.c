@@ -30,7 +30,8 @@ char fileReadBuffer[SIM868_CHARBUFFER_LENGTH] = {0};
 char fileWriteBuffer[SIM868_CHARBUFFER_LENGTH] = {0};
 char httpBuffer[SIM868_CHARBUFFER_LENGTH] = {0};
 uint8_t hasNewFile = 0;
-uint32_t httpTimeout = 0;
+uint32_t httpActionTime = 0;
+uint32_t httpLoopTime = 0;
 
 uint32_t lastCommandTransmitTimestamp = 0;
 
@@ -45,12 +46,13 @@ void sim868_init(void) {
     sim868_usart = &usart1;
 #   endif
     sim868_usart->rx_vec = sim868_receive;
-    usart_init(sim868_usart, 9600);
+    usart_init(sim868_usart, 57600);
 }
 
 #ifdef SIM868_DEBUG
 uint8_t startmsg = 1;
 #endif
+
 void sim868_put(const char* data) {
 #ifdef SIM868_DEBUG
     if (startmsg) {
@@ -66,11 +68,13 @@ void sim868_putln(const char* data) {
 #ifdef SIM868_DEBUG
     if (startmsg) {
         usart_print_sync(main_usart, "$ ");
+        startmsg = 0;
     }
     usart_println_sync(main_usart, data);
     startmsg = 1;
 #endif
     usart_println_sync(sim868_usart, data);
+    lastCommandTransmitTimestamp = millis();
 }
 
 void sim868_receive(uint8_t data) {
@@ -131,10 +135,8 @@ void sim868_handle_buffer(void) {
     }
     sei();
 
-#ifdef SIM868_DEBUG
-    usart_print_sync(main_usart, "> ");
-    usart_println_sync(main_usart, bank);
-#endif
+    sim868_debug("> ");
+    sim868_debugln(bank);
 
     if (memcmp(bank, "ERROR\0", 6) == 0) {
         sim868_status = SIM868_STATUS_ERROR;
@@ -182,7 +184,7 @@ void sim868_handle_buffer(void) {
             case SIM868_STATUS_WAIT_FILENAME:
                 memset(fileReadName, 0, 8);
                 strcpy(fileReadName, bank);
-                SIM868_busy();
+                sim868_status = SIM868_STATUS_IGNORE;
                 break;
             case SIM868_STATUS_WAIT_FILECONTENT:
                 memset(fileReadBuffer, 0, SIM868_CHARBUFFER_LENGTH);
@@ -218,6 +220,7 @@ void sim868_http_loop(void) {
     static uint8_t ml_status = 0;
     uint16_t len;
     char lens[6] = {0};
+    char tmp[20] = {0};
 
     if (sim868_lock & ~SIM868_HTTP_LOCK) {
         return;
@@ -226,6 +229,7 @@ void sim868_http_loop(void) {
     switch (ml_status) {
         case 0:
             SIM868_async_wait();
+            httpLoopTime = millis();
             sim868_status = SIM868_STATUS_WAIT_FILENAME;
             fileReadName[0] = 0;
             sim868_putln("AT+FSLS=C:\\buffer\\");
@@ -313,19 +317,22 @@ void sim868_http_loop(void) {
             SIM868_busy();
             httpStatus = SIM868_HTTP_PENDING;
             sim868_putln("AT+HTTPACTION=1");
-            httpTimeout = millis();
+            httpActionTime = millis();
             ml_status++;
             break;
         case SIM868_MAIN_LOOP_HTTPINIT+6:
             SIM868_async_wait();
             if (sim868_status == SIM868_STATUS_ERROR) { ml_status = SIM868_MAIN_LOOP_HTTPINIT+7; httpStatus = SIM868_HTTP_NETWORK_ERROR; break; }
-            if ((millis() - httpTimeout) > 30000) {
+            if ((millis() - httpActionTime) > 30000) {
                 httpStatus = SIM868_HTTP_NETWORK_ERROR;
-                #ifdef SIM868_DEBUG
-                usart_println_sync(main_usart, "HTTP TIMEOUT");
-                #endif
+                sim868_debugln("HTTP TIMEOUT");
             }
             if (httpStatus == SIM868_HTTP_PENDING) {break;}
+
+            sprintf(tmp, "%lu", (millis() - httpActionTime));
+            sim868_debug("! HTTP action time: ");
+            sim868_debugln(tmp);
+
             SIM868_busy();
             sim868_putln("AT+HTTPTERM");
             ml_status++;
@@ -345,6 +352,10 @@ void sim868_http_loop(void) {
             SIM868_busy();
             sim868_put("AT+FSDEL=C:\\buffer\\");
             sim868_putln(fileReadName);
+
+            sprintf(tmp, "%lu", (millis() - httpLoopTime));
+            sim868_debug("! HTTP Loop time: ");
+            sim868_debugln(tmp);
             ml_status = 0;
             break;
 
@@ -441,12 +452,18 @@ void sim868_buffer_loop(void) {
 void sim868_loop(uint8_t powersave) {
     sim868_handle_buffer();
 
-    if ((millis() - lastCommandTransmitTimestamp) > 10000 &&
+    if ((millis() - lastCommandTransmitTimestamp) > 1000 && sim868_status == SIM868_STATUS_IGNORE) {
+        sim868_debugln("WATCHDOG");
+        sim868_status = SIM868_STATUS_OK;
+    }
+    if ((millis() - lastCommandTransmitTimestamp) > 5000 &&
         (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR && sim868_status != SIM868_STATUS_OFF)) {
-        #ifdef SIM868_DEBUG
-        usart_println_sync(main_usart, "WATCHDOG");
-        #endif
-        sim868_status = SIM868_STATUS_ERROR;
+        sim868_debugln("WATCHDOG");
+        if (sim868_status == SIM868_STATUS_IGNORE) {
+            sim868_status = SIM868_STATUS_OK;
+        } else {
+            sim868_status = SIM868_STATUS_ERROR;
+        }
     }
 
     static uint32_t watchdog = 0;

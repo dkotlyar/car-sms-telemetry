@@ -16,7 +16,7 @@
 #   error Unknown USART port.
 #endif
 
-//#define SIM868_DEBUG
+#define SIM868_DEBUG
 
 #define SIM868_BUFFER_BANKS     4
 
@@ -27,6 +27,7 @@
 #define SIM868_STATUS_WAIT_FILECONTENT  4
 #define SIM868_STATUS_WAIT_FILEINPUT    5
 #define SIM868_STATUS_WAIT_BUFFERINDEX  6
+#define SIM868_STATUS_IGNORE            253
 #define SIM868_STATUS_OFF               254
 #define SIM868_STATUS_BUSY              255
 
@@ -65,8 +66,15 @@ void sim868_handle_buffer(void);
 void sim868_loop(uint8_t powersave);
 void sim868_post_async(const char *data);
 
-#define SIM868_wait() {while (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {_delay_ms(1);}}
 #define SIM868_async_wait() {if (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {break;}}
-#define SIM868_busy() { sim868_status = SIM868_STATUS_BUSY; lastCommandTransmitTimestamp = millis();}
+#define SIM868_busy() { sim868_status = SIM868_STATUS_BUSY; }
+
+#ifdef SIM868_DEBUG
+#define sim868_debug(data) { usart_print_sync(main_usart, data); }
+#define sim868_debugln(data) { usart_println_sync(main_usart, data); }
+#else
+#define sim868_debug(data) {}
+#define sim868_debugln(data) {}
+#endif
 
 #endif //FIRMWARE_SIM868_H

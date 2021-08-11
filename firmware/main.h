@@ -18,6 +18,12 @@
 
 // PROJECT SECTION
 
+typedef enum {
+    POWER_OFF,
+    POWER_ON,
+    POWER_AUTOMATIC
+} powermode_t;
+
 #define USART0_ENABLE
 #define USART1_ENABLE
 #define CAN_ENABLE
@@ -33,6 +39,7 @@
 #define SIM868_CGNURC               "1"
 
 #define POWERSAVE
+#define DEFAULT_POWER_MODE  POWER_ON
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
@@ -53,12 +60,6 @@
 #define SIM868_PWR_Pn   0
 #define sim868_pwr_on() {SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 #define sim868_pwr_off(){SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);}
-
-typedef enum {
-    POWER_OFF,
-    POWER_ON,
-    POWER_AUTOMATIC
-} powermode_t;
 
 #define obd_log(frmt, var) { sprintf(temp, frmt, var); usart_print_sync(main_usart, temp); }
 

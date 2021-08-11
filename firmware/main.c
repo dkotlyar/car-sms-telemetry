@@ -55,7 +55,7 @@ void init(void) {
 #   endif
     main_usart->rx_vec = usart_rx;
 
-    usart_init(main_usart, 9600);
+    usart_init(main_usart, 57600);
 
     obd2_init();
     sim868_init();
