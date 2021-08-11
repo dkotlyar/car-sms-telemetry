@@ -487,6 +487,10 @@ void sim868_loop(uint8_t powersave) {
 
     switch (sim868_loopStatus) {
         case SIM868_LOOP_INIT:
+            if (powersave) {
+                sim868_loopStatus = SIM868_LOOP_POWER_DOWN;
+                break;
+            }
             sim868_pwr_on();
             SIM868_busy();
             sim868_putln("AT+CPIN?");
@@ -536,12 +540,6 @@ void sim868_loop(uint8_t powersave) {
         case SIM868_LOOP_POWER_DOWN:
             sim868_status = SIM868_STATUS_OFF;
             sim868_pwr_off();
-            if (!powersave) {
-                sim868_loopStatus = SIM868_LOOP_INIT;
-            }
-            break;
-        case SIM868_LOOP_POWERSAVE:
-            sim868_status = SIM868_STATUS_OFF;
             if (!powersave) {
                 sim868_loopStatus = SIM868_LOOP_INIT;
             }
