@@ -14,6 +14,21 @@ uint8_t usart_rx_buffer;
 extern usart_t * sim868_usart;
 powermode_t pwrMode;
 
+uint16_t timer2 = 0;
+uint8_t sleep = 0;
+// 16'000'000 / 1024 / 256 = 61,03515625 Hz
+ISR(TIMER2_COMP_vect) {
+    timer2++;
+    // 610 / 61,035 Hz = 9,99 сек
+    if (timer2 >= 610) {
+        if (1 == sleep) {
+            blink(1);
+            sleep = 2;
+        }
+        timer2 = 0;
+    }
+}
+
 void usart_rx(uint8_t data) {
 #ifdef SIM868_USART_BRIDGE
     usart_send_sync(main_usart, data); // echo
@@ -44,6 +59,7 @@ void init(void) {
     SETBIT_1(LED_DDR, LED_Pn);
     SETBIT_0(BTN_DDR, BTN_Pn);
     SETBIT_1(SIM868_PWR_DDR, SIM868_PWR_Pn);
+    sim868_pwr_off();
     LED_OFF();
 
     millis_init();
@@ -65,7 +81,7 @@ void init(void) {
     usart_println_sync(main_usart, "SIM868 Bridge mode");
 #endif
 
-    setPowerMode(POWER_ON);
+    setPowerMode(DEFAULT_POWER_MODE);
 }
 
 void loop(void) {
@@ -140,18 +156,46 @@ void loop(void) {
 int main(void) {
 	cli();
 	init();
-    wdt_enable(WDTO_1S);
-    if (MCUSR & (1<<WDRF)) {
-        usart_println_sync(main_usart, "SYSTEM: Watchdog reset vector");
-    }
-    MCUSR &= ~(1<<WDRF);
+
+	// SLEEP TIMER
+    // CTC, prescaler: 1024
+    TCCR2A = (0<<WGM20)|(0<<COM2A1)|(0<<COM2A0)|(1<<WGM21)|(1<<CS22)|(1<<CS21)|(1<<CS20);
+    TCNT2 = 0x00;
+    OCR2A = 0xFF;
+    TIMSK2 |= (1<<OCIE2A);
+    set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+    sleep_enable();
+
+    // WATCHDOG
+//    wdt_enable(WDTO_2S);
+//    if (MCUSR & (1<<WDRF)) {
+//        usart_println_sync(main_usart, "SYSTEM: Watchdog reset vector");
+//    }
+//    MCUSR &= ~(1<<WDRF);
 	sei();
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 	while(1) {
-	    loop();
-	    wdt_reset();
+	    switch (sleep) {
+	        case 1:
+                sleep_cpu();
+                sleep_mode();
+                break;
+	        case 2:
+                usart_println_sync(main_usart, "Leave sleep mode");
+                sleep = 0;
+                break;
+	        default:
+                loop();
+                wdt_reset();
+                if (millis() > 3000) {
+                    usart_println_sync(main_usart, "Enter sleep mode");
+                    timer2 = 0;
+                    sleep = 1;
+                }
+                break;
+	    }
 	}
 #pragma clang diagnostic pop
 }

@@ -9,6 +9,7 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
+#include <avr/sleep.h>
 #include "usart_lib.h"
 
 #define SETBIT(reg, bit, value)     {if (value) {SETBIT_1(reg, bit)} else {SETBIT_0(reg, bit)}}
@@ -39,7 +40,7 @@ typedef enum {
 #define SIM868_CGNURC               "1"
 
 #define POWERSAVE
-#define DEFAULT_POWER_MODE  POWER_ON
+#define DEFAULT_POWER_MODE  POWER_OFF
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
