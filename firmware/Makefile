@@ -48,30 +48,34 @@ port := /dev/ttyUSB0
 ################### Of course you can but do it carefully #####################
 ###############################################################################
 
-source_dirs      := $(addprefix ../,$(source_dirs))
+#libdir			 := /usr/lib/avr/include/
+source_dirs      := $(addprefix ./,$(source_dirs))
 search_wildcards := $(addsuffix /*.c,$(source_dirs))
+elf_file		 := ./release/$(program_name).elf
+hex_file		 := ./release/$(program_name).hex
 
-all:
-	mkdir -p release && cd release
-	make $(program_name) --directory=release --makefile=../Makefile
+all: mkdir $(program_name)
+
+mkdir:
+	mkdir -p $(addprefix release/,$(source_dirs))
 
 clean:
 	rm -rf release
 
-$(program_name): $(notdir $(patsubst %.c,%.o,$(wildcard $(search_wildcards))))
-	avr-gcc -Wall -ggdb -Os -mmcu=$(mcu) $^ -o $@.elf
-	avr-objcopy -O ihex -R .eeprom -R .fuse -R .lock -R .signature -R .user_signatures $(program_name).elf $(program_name).hex
-	avr-size --mcu=$(mcu) --format=avr $(program_name).elf
+$(program_name): $(addprefix release/,$(patsubst %.c,%.o,$(wildcard $(search_wildcards))))
+	avr-gcc -Wall -ggdb -Os -mmcu=$(mcu) $^ -o $(elf_file)
+	avr-objcopy -O ihex -R .eeprom -R .fuse -R .lock -R .signature -R .user_signatures $(elf_file) $(hex_file)
+	avr-size --mcu=$(mcu) --format=avr $(elf_file)
 
 VPATH := $(source_dirs)
 
-%.o: %.c
-	avr-gcc -c -O3 -mmcu=$(mcu) -MD $(addprefix -I,$(source_dirs)) $<
+release/%.o: %.c
+	avr-gcc -c -O3 -mmcu=$(mcu) -MD $(addprefix -I,$(source_dirs)) -o $@ $<
 
 flash:
-	avrdude -p $(mcu) -c $(programmer) -P $(port) -U flash:w:release/$(program_name).hex:i -F
+	avrdude -p $(mcu) -c $(programmer) -P $(port) -U flash:w:$(hex_file):i -F
 
 flash-elf:
-	avrdude -p $(mcu) -c $(programmer) -P $(port) -U flash:w:release/$(program_name).elf:e -F
+	avrdude -p $(mcu) -c $(programmer) -P $(port) -U flash:w:$(elf_file):e -F
 
 include $(wildcard *.d)
