@@ -10,24 +10,23 @@
 #include <string.h>
 
 usart_t * main_usart;
-uint8_t usart_rx_buffer;
 extern usart_t * sim868_usart;
 powermode_t pwrMode;
 
 extern uint32_t _millis;
 uint32_t timer2 = 0;
-uint8_t sleep = 0;
+sleepmode_t sleepmode;
 // 125 Hz
 ISR(TIMER2_COMP_vect) {
     timer2++;
-    if (sleep) {
+    if (SLEEP == sleepmode) {
         _millis += 1000 / SLEEP_TIMER_FREQ;
     }
 
     if (timer2 >= 10000UL * SLEEP_TIMER_FREQ) {
-        if (1 == sleep) {
+        if (SLEEP == sleepmode) {
             blink(1);
-            sleep = 2;
+            sleepmode = WAKEUP;
         }
         timer2 = 0;
     }
@@ -86,6 +85,13 @@ void init(void) {
 #endif
 
     setPowerMode(DEFAULT_POWER_MODE);
+    sleepmode = WORK;
+}
+
+void main_reset(void) {
+    _millis = 0;
+    obd2_reset();
+    sim868_reset();
 }
 
 void loop(void) {
@@ -147,9 +153,9 @@ void loop(void) {
     if (!powersave && pton(&telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
         pTimerReset(&telemetryTon);
         char buf[SIM868_CHARBUFFER_LENGTH];
-        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
+        sprintf(buf, "{\"ticks\":%lu,\"sim868_imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
-                _millis, imei, cgnurc, cgnurc_timestamp,
+                _millis, sim868_imei, sim868_cgnurc, sim868_cgnurc_timestamp,
                 obd2_timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
                 obd2_engine_speed, obd2_vehicle_speed);
         sim868_post_async(buf);
@@ -181,22 +187,24 @@ int main(void) {
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
 	while(1) {
-	    switch (sleep) {
-	        case 1:
+	    switch (sleepmode) {
+	        case GOTOSLEEP:
+	            usart_println_sync(main_usart, "Enter sleep mode");
+	            timer2 = 0;
+	        case SLEEP:
                 sleep_cpu();
                 sleep_mode();
                 break;
-	        case 2:
+	        case WAKEUP:
                 usart_println_sync(main_usart, "Leave sleep mode");
-                sleep = 0;
+                main_reset();
+                sleepmode = WORK;
                 break;
 	        default:
                 loop();
                 wdt_reset();
                 if (millis() > 3000) {
-                    usart_println_sync(main_usart, "Enter sleep mode");
-                    timer2 = 0;
-                    sleep = 1;
+                    sleepmode = GOTOSLEEP;
                 }
                 break;
 	    }
