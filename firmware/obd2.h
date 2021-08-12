@@ -22,16 +22,17 @@
 #define OBD2_PID_ODOMETER                       0xA6
 #define OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED 0x31
 
-extern int8_t engine_coolant_temperature;
-extern uint16_t engine_speed;
-extern uint8_t vehicle_speed;
-extern uint16_t run_time_since_engine_start;
-extern uint8_t fuel_level;
-extern uint32_t odometer;
-extern uint16_t distance_traveled_since_codes_cleared;
-extern uint32_t timestamp;
+extern int8_t obd2_engine_coolant_temperature;
+extern uint16_t obd2_engine_speed;
+extern uint8_t obd2_vehicle_speed;
+extern uint16_t obd2_run_time_since_engine_start;
+extern uint8_t obd2_fuel_level;
+extern uint32_t obd2_odometer;
+extern uint16_t obd2_distance_traveled_since_codes_cleared;
+extern uint32_t obd2_timestamp;
 
 void obd2_init(void);
+void obd2_reset(void);
 void obd2_loop(void);
 //void obd2_write(uint8_t service_number, uint8_t pid_code, uint8_t A, uint8_t B, uint8_t C, uint8_t D);
 //void obd2_abort(uint8_t pid_code);
