@@ -6,20 +6,17 @@
 #include <stdio.h>
 #include <string.h>
 
-int8_t engine_coolant_temperature;
-uint16_t engine_speed;
-uint8_t vehicle_speed;
-uint16_t run_time_since_engine_start;
-uint8_t fuel_level;
-uint32_t odometer;
-uint16_t distance_traveled_since_codes_cleared;
-
-uint32_t aprox_distance_traveled = 0; // расстояние в мм * 3.6
-uint32_t aprox_distance_traveled_lasttimestamp = 0;
-
-uint32_t engine_start_time = ~0;
-
-uint32_t timestamp = 0;
+int8_t obd2_engine_coolant_temperature;
+uint16_t obd2_engine_speed;
+uint8_t obd2_vehicle_speed;
+uint16_t obd2_run_time_since_engine_start;
+uint8_t obd2_fuel_level;
+uint32_t obd2_odometer;
+uint16_t obd2_distance_traveled_since_codes_cleared;
+uint32_t obd2_aprox_distance_traveled = 0; // расстояние в мм * 3.6
+uint32_t obd2_aprox_distance_traveled_lasttimestamp = 0;
+uint32_t obd2_engine_start_time = ~0;
+uint32_t obd2_timestamp = 0;
 
 st_cmd_t can_rx;
 st_cmd_t can_tx;
@@ -28,10 +25,28 @@ uint8_t obd_tx_buffer[8];
 
 extern usart_t * main_usart;
 
+// obd2_reloop
+uint8_t obd2_reqloop_status;
+uint32_t obd2_reqloop_watchdog;
+
+// obd2_loop
+uint8_t obd2_loop_status;
+
 void obd2_init(void) {
     can_init(0);
     can_rx.pt_data = &obd_rx_buffer[0];
     can_tx.pt_data = &obd_tx_buffer[0];
+    obd2_reset();
+}
+
+void obd2_reset(void) {
+    obd2_aprox_distance_traveled = 0;
+    obd2_aprox_distance_traveled_lasttimestamp = 0;
+    obd2_engine_start_time = ~0;
+    obd2_timestamp = 0;
+    obd2_reqloop_status = 0;
+    obd2_reqloop_watchdog = 0;
+    obd2_loop_status = 0;
 }
 
 void obd2_handle(uint8_t* pt_data) {
@@ -40,42 +55,42 @@ void obd2_handle(uint8_t* pt_data) {
         return;
     }
 
-    timestamp = millis();
+    obd2_timestamp = millis();
 
     uint8_t pid_code = pt_data[2];
     uint8_t *payload = &pt_data[3];
 
     switch (pid_code) {
         case OBD2_PID_ENGINE_COOLANT_TEMPERATURE:
-            engine_coolant_temperature = payload[0] - 40;
+            obd2_engine_coolant_temperature = payload[0] - 40;
             break;
         case OBD2_PID_VEHICLE_SPEED:
-            vehicle_speed = payload[0];
-            uint32_t delta_time = millis() - aprox_distance_traveled_lasttimestamp;
-            if (aprox_distance_traveled_lasttimestamp != 0 && delta_time < 5000) {
-                aprox_distance_traveled += vehicle_speed * delta_time; // преобразуем скорость к величинам 3.6*мм/мс
+            obd2_vehicle_speed = payload[0];
+            uint32_t delta_time = millis() - obd2_aprox_distance_traveled_lasttimestamp;
+            if (obd2_aprox_distance_traveled_lasttimestamp != 0 && delta_time < 5000) {
+                obd2_aprox_distance_traveled += obd2_vehicle_speed * delta_time; // преобразуем скорость к величинам 3.6*мм/мс
             }
-            aprox_distance_traveled_lasttimestamp = millis();
+            obd2_aprox_distance_traveled_lasttimestamp = millis();
             break;
         case OBD2_PID_RUN_TIME_SINCE_ENGINE_START:
-            run_time_since_engine_start = (payload[0] << 8) | payload[2];
+            obd2_run_time_since_engine_start = (payload[0] << 8) | payload[2];
             break;
         case OBD2_PID_FUEL_LEVEL:
-            fuel_level = payload[0];
+            obd2_fuel_level = payload[0];
             break;
         case OBD2_PID_ODOMETER:
-            odometer = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16) | (payload[2] << 8) | payload[3];
+            obd2_odometer = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16) | (payload[2] << 8) | payload[3];
             break;
         case OBD2_PID_ENGINE_SPEED:
-            engine_speed = ((payload[0] << 8) | payload[1]) / 4;
-            if (engine_speed < 500) {
-                engine_start_time = ~0;
-            } else if (engine_start_time == ~0) {
-                engine_start_time = millis();
+            obd2_engine_speed = ((payload[0] << 8) | payload[1]) / 4;
+            if (obd2_engine_speed < 500) {
+                obd2_engine_start_time = ~0;
+            } else if (obd2_engine_start_time == ~0) {
+                obd2_engine_start_time = millis();
             }
             break;
         case OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED:
-            distance_traveled_since_codes_cleared = (payload[0] << 8) | payload[2];
+            obd2_distance_traveled_since_codes_cleared = (payload[0] << 8) | payload[2];
             break;
     }
 }
@@ -84,14 +99,11 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
     uint8_t rx_status;
     uint8_t tx_status;
 
-    static uint8_t status = 0;
-    static uint32_t watchdog = 0;
-
     uint8_t retval = 0;
 
-    switch (status) {
+    switch (obd2_reqloop_status) {
         case 0:
-            status++;
+            obd2_reqloop_status++;
             break;
         case 1:
             can_rx.status = 0;
@@ -111,45 +123,45 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
             can_tx.ctrl.rtr = 0;
             can_tx.dlc = 8;
             can_tx.cmd = CMD_TX_DATA;
-            status++;
+            obd2_reqloop_status++;
             break;
         case 2:
             if (can_cmd(&can_rx) == CAN_CMD_ACCEPTED) {
-                status++;
+                obd2_reqloop_status++;
             }
             break;
         case 3:
             if (can_cmd(&can_tx) == CAN_CMD_ACCEPTED) {
-                status++;
-                watchdog = millis();
+                obd2_reqloop_status++;
+                obd2_reqloop_watchdog = millis();
             }
             break;
         case 4:
             tx_status = can_get_status(&can_tx);
             if (tx_status == CAN_STATUS_COMPLETED) {
-                status++;
-                watchdog = millis();
+                obd2_reqloop_status++;
+                obd2_reqloop_watchdog = millis();
             } else if (tx_status == CAN_STATUS_ERROR) {
-                status = OBD2_REQUEST_ERROR;
+                obd2_reqloop_status = OBD2_REQUEST_ERROR;
             }
-            if ((millis() - watchdog) > OBD2_DEFAULT_TIMEOUT) {
-                status = OBD2_REQUEST_TIMEOUT;
+            if ((millis() - obd2_reqloop_watchdog) > OBD2_DEFAULT_TIMEOUT) {
+                obd2_reqloop_status = OBD2_REQUEST_TIMEOUT;
             }
             break;
         case 5:
             rx_status = can_get_status(&can_rx);
             if (rx_status == CAN_STATUS_COMPLETED) {
                 obd2_handle(can_rx.pt_data);
-                status = OBD2_REQUEST_OK;
+                obd2_reqloop_status = OBD2_REQUEST_OK;
             } else if (rx_status == CAN_STATUS_ERROR) {
-                status = OBD2_REQUEST_ERROR;
+                obd2_reqloop_status = OBD2_REQUEST_ERROR;
             }
-            if ((millis() - watchdog) > OBD2_DEFAULT_TIMEOUT) {
-                status = OBD2_REQUEST_TIMEOUT;
+            if ((millis() - obd2_reqloop_watchdog) > OBD2_DEFAULT_TIMEOUT) {
+                obd2_reqloop_status = OBD2_REQUEST_TIMEOUT;
             }
             break;
         case OBD2_REQUEST_OK:
-            status = 0;
+            obd2_reqloop_status = 0;
             retval = 1;
             break;
         case OBD2_REQUEST_TIMEOUT:
@@ -158,11 +170,11 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
             can_tx.cmd = CMD_ABORT;
             can_cmd(&can_rx);
             can_cmd(&can_tx);
-            status = 0;
+            obd2_reqloop_status = 0;
             retval = 1;
             break;
         default:
-            status = OBD2_REQUEST_ERROR;
+            obd2_reqloop_status = OBD2_REQUEST_ERROR;
             break;
     }
 
@@ -170,10 +182,8 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
 }
 
 void obd2_loop(void) {
-    static uint8_t status = 0;
-
     uint8_t val = 0;
-    switch (status) {
+    switch (obd2_loop_status) {
         case 0:
             val = obd2_reqloop(OBD2_PID_ENGINE_COOLANT_TEMPERATURE);
             break;
@@ -196,13 +206,13 @@ void obd2_loop(void) {
 //            val = obd2_reqloop(OBD2_PID_ODOMETER);
 //            break;
         default:
-            status = 0;
+            obd2_loop_status = 0;
             val = 0;
             break;
     }
 
     if (val > 0) {
-        status++;
+        obd2_loop_status++;
     }
 }
 
@@ -280,30 +290,18 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
     }
 }
 
+// Возвращает время работы двигателя
+// Если двигатель не запущен или таймаут связи с ЭБУ, то возвращается 0
 uint32_t obd2_get_runtime_since_engine_start(void) {
-    if (engine_start_time == ~0) {
-        return 0;
-    } else if ((millis() - timestamp) > 5000) {
+    if (obd2_engine_start_time == ~0 || (millis() - obd2_timestamp) > 5000) {
+        obd2_engine_start_time = ~0;
         return 0;
     } else {
-        return millis() - engine_start_time;
+        return millis() - obd2_engine_start_time;
     }
 }
 
-// Возвращает количество условных единиц, пройденных автомобилем
-// Для рассчёта дистанции необходимо воспользоваться формулой:
-// DISTANCE_METERS = result / (3.6 * 1000)
+// Возвращает дистанцию, пройденную автомобилем, в миллиметрах
 uint32_t obd2_get_aprox_distance_traveled(void) {
-    return (uint32_t)(aprox_distance_traveled / 3.6f);
+    return (uint32_t)((float)obd2_aprox_distance_traveled / 3.6f);
 }
-
-//void pid_request(void) {
-//    obd2_request_t req;
-//    req.service_number = 1;
-//    req.pid_code = 0;
-//    req.status = OBD2_REQUEST_NEW;
-//
-//    uint8_t res = obd2_request_sync(&req);
-//
-//    usart_send_sync(&usart0, res);
-//}

@@ -137,10 +137,10 @@ void loop(void) {
         char temp[12];
         usart_print_sync(main_usart, "> +OBD: ");
         obd_log("%lu", millis()); usart_print_sync(main_usart, ",");
-        obd_log("%d", engine_coolant_temperature); usart_print_sync(main_usart, ",");
+        obd_log("%d", obd2_engine_coolant_temperature); usart_print_sync(main_usart, ",");
         obd_log("%lu", obd2_get_runtime_since_engine_start()); usart_print_sync(main_usart, ",");
-        obd_log("%u", engine_speed); usart_print_sync(main_usart, ",");
-        obd_log("%u", vehicle_speed); usart_print_sync(main_usart, ",");
+        obd_log("%u", obd2_engine_speed); usart_print_sync(main_usart, ",");
+        obd_log("%u", obd2_vehicle_speed); usart_print_sync(main_usart, ",");
         obd_log("%lu", obd2_get_aprox_distance_traveled()); usart_println_sync(main_usart, "");
     }
 
@@ -150,8 +150,8 @@ void loop(void) {
         sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
                 _millis, imei, cgnurc, cgnurc_timestamp,
-                timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
-                engine_speed, vehicle_speed);
+                obd2_timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
+                obd2_engine_speed, obd2_vehicle_speed);
         sim868_post_async(buf);
     }
 #endif
