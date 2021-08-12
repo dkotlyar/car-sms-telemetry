@@ -14,13 +14,17 @@ uint8_t usart_rx_buffer;
 extern usart_t * sim868_usart;
 powermode_t pwrMode;
 
-uint16_t timer2 = 0;
+extern uint32_t _millis;
+uint32_t timer2 = 0;
 uint8_t sleep = 0;
-// 16'000'000 / 1024 / 256 = 61,03515625 Hz
+// 125 Hz
 ISR(TIMER2_COMP_vect) {
     timer2++;
-    // 610 / 61,035 Hz = 9,99 сек
-    if (timer2 >= 610) {
+    if (sleep) {
+        _millis += 1000 / SLEEP_TIMER_FREQ;
+    }
+
+    if (timer2 >= 10000UL * SLEEP_TIMER_FREQ) {
         if (1 == sleep) {
             blink(1);
             sleep = 2;
@@ -161,7 +165,7 @@ int main(void) {
     // CTC, prescaler: 1024
     TCCR2A = (0<<WGM20)|(0<<COM2A1)|(0<<COM2A0)|(1<<WGM21)|(1<<CS22)|(1<<CS21)|(1<<CS20);
     TCNT2 = 0x00;
-    OCR2A = 0xFF;
+    OCR2A = ((F_CPU / 1024) / SLEEP_TIMER_FREQ) - 1;
     TIMSK2 |= (1<<OCIE2A);
     set_sleep_mode(SLEEP_MODE_PWR_SAVE);
     sleep_enable();

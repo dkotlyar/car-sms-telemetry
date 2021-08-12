@@ -64,7 +64,7 @@ void obd2_handle(uint8_t* pt_data) {
             fuel_level = payload[0];
             break;
         case OBD2_PID_ODOMETER:
-            odometer = (payload[0] << 24) | (payload[1] << 16) | (payload[2] << 8) | payload[3];
+            odometer = ((uint32_t)payload[0] << 24) | ((uint32_t)payload[1] << 16) | (payload[2] << 8) | payload[3];
             break;
         case OBD2_PID_ENGINE_SPEED:
             engine_speed = ((payload[0] << 8) | payload[1]) / 4;

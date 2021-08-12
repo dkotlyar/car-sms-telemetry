@@ -19,7 +19,7 @@ void millis_init(void) {
     TIMSK0 |= (1<<OCIE0A);
 }
 ISR(TIMER0_COMP_vect) {
-        _millis++;
+    _millis++;
 }
 #elif defined(__AVR_ATmega128__)
 void millis_init(void) {
@@ -32,6 +32,6 @@ void millis_init(void) {
     TIMSK |= (1<<OCIE0);
 }
 ISR(TIMER0_COMP_vect) {
-        _millis++;
+    _millis++;
 }
 #endif
