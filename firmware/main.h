@@ -39,7 +39,7 @@ typedef enum {
 #define SIM868_TELEMETRY_URL        "http://dkotlyar.ru:8000/telemetry"
 #define SIM868_CGNURC               "1"
 
-#define POWERSAVE
+#define SLEEP_TIMER_FREQ    125 // Hz
 #define DEFAULT_POWER_MODE  POWER_OFF
 
 #define LED_DDR	    DDRE
