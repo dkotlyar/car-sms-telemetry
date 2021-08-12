@@ -25,6 +25,13 @@ typedef enum {
     POWER_AUTOMATIC
 } powermode_t;
 
+typedef enum {
+    WORK,
+    GOTOSLEEP,
+    SLEEP,
+    WAKEUP
+} sleepmode_t;
+
 #define USART0_ENABLE
 #define USART1_ENABLE
 #define CAN_ENABLE
