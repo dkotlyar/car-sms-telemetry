@@ -18,6 +18,10 @@
 
 #define SIM868_DEBUG
 
+#define SIM868_IMEI_SIZE        20
+#define SIM868_CGNURC_SIZE      115
+#define SIM868_FILENAME_SIZE    8
+
 #define SIM868_BUFFER_BANKS     4
 
 #define SIM868_STATUS_OK                200
@@ -55,11 +59,12 @@
 #define SIM868_BUFFER_LOCK          (1<<0)
 #define SIM868_HTTP_LOCK            (1<<1)
 
-extern char imei[20];
-extern char cgnurc[115];
-extern uint32_t cgnurc_timestamp;
+extern char sim868_imei[20];
+extern char sim868_cgnurc[115];
+extern uint32_t sim868_cgnurc_timestamp;
 
 void sim868_init(void);
+void sim868_reset(void);
 void sim868_receive(uint8_t data);
 void sim868_handle_buffer(void);
 void sim868_loop(uint8_t powersave);
