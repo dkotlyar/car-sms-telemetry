@@ -59,6 +59,8 @@
 #define SIM868_BUFFER_LOCK          (1<<0)
 #define SIM868_HTTP_LOCK            (1<<1)
 
+#define SIM868_LOOP_RET_POWERDOWN   1
+
 extern char sim868_imei[20];
 extern char sim868_cgnurc[115];
 extern uint32_t sim868_cgnurc_timestamp;

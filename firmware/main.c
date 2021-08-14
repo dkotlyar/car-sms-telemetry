@@ -15,10 +15,13 @@ usart_t * main_usart;
 extern usart_t * sim868_usart;
 powermode_t pwrMode;
 
-ptimer_t main_powersaveTof;
+uint8_t powersave;
+ptimer_t main_powerTon;
+ptimer_t main_powersaveTof_long;
 ptimer_t main_telemetryTon;
 ptimer_t main_obdTon;
 uint8_t main_sim868_work;
+extern uint8_t sim868_hasNewFile;
 
 extern uint32_t _millis;
 uint16_t timer2 = 0;
@@ -92,7 +95,9 @@ void main_reset(void) {
     _millis = 0;
     obd2_reset();
     sim868_reset();
-    pTimerReset(&main_powersaveTof);
+    powersave = 0;
+    pTimerReset(&main_powerTon);
+    pTimerReset(&main_powersaveTof_long);
     pTimerReset(&main_telemetryTon);
     pTimerReset(&main_obdTon);
     main_sim868_work = 0;
@@ -132,11 +137,11 @@ void init(void) {
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
-    uint8_t powersave = 0;
-
     uint32_t _millis = millis();
     if (obd2_loop()) { // change obd code
-        powersave = !ptof(&main_powersaveTof, obd2_get_runtime_since_engine_start() > 0, 30000);
+        uint8_t engine = obd2_get_runtime_since_engine_start() > 0;
+        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 10000), 60000) && sim868_hasNewFile);
+        powersave = !p;
     }
 
     if (POWER_OFF == pwrMode) {
@@ -145,9 +150,10 @@ void loop(void) {
         powersave = 0;
     }
 
-    main_sim868_work = main_sim868_work || main_powersaveTof.q;
+    main_sim868_work = main_sim868_work || !powersave;
     if (main_sim868_work) {
-        if (sim868_loop(powersave)) { // sim868 sleep
+        uint8_t sim868_retval = sim868_loop(powersave);
+        if (SIM868_LOOP_RET_POWERDOWN == sim868_retval) {
             main_sim868_work = 0;
         }
     }
@@ -209,7 +215,6 @@ int main(void) {
 	        case GOTOSLEEP:
 	            long_blink(1);
 	            usart_println_sync(main_usart, "Enter sleep mode");
-//	            while (!(*(main_usart->UCSRA) & main_usart->readyToTransmit));
                 _delay_us(1000);
 	            timer2 = 0;
 	            wdt_disable();

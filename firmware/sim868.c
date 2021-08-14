@@ -588,7 +588,7 @@ uint8_t sim868_loop(uint8_t powersave) {
                 sim868_loop_state = SIM868_LOOP_INIT;
                 break;
             }
-            retval = 1;
+            retval = SIM868_LOOP_RET_POWERDOWN;
             break;
         case SIM868_LOOP_OK:
             sim868_buffer_loop();
