@@ -103,9 +103,6 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
 
     switch (obd2_reqloop_status) {
         case 0:
-            obd2_reqloop_status++;
-            break;
-        case 1:
             can_rx.status = 0;
             can_rx.id.std = OBD2_RX_IDE;
             can_rx.idmsk.std = OBD2_RX_IDMSK;
@@ -125,18 +122,18 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
             can_tx.cmd = CMD_TX_DATA;
             obd2_reqloop_status++;
             break;
-        case 2:
+        case 1:
             if (can_cmd(&can_rx) == CAN_CMD_ACCEPTED) {
                 obd2_reqloop_status++;
             }
             break;
-        case 3:
+        case 2:
             if (can_cmd(&can_tx) == CAN_CMD_ACCEPTED) {
                 obd2_reqloop_status++;
                 obd2_reqloop_watchdog = millis();
             }
             break;
-        case 4:
+        case 3:
             tx_status = can_get_status(&can_tx);
             if (tx_status == CAN_STATUS_COMPLETED) {
                 obd2_reqloop_status++;
@@ -148,7 +145,7 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
                 obd2_reqloop_status = OBD2_REQUEST_TIMEOUT;
             }
             break;
-        case 5:
+        case 4:
             rx_status = can_get_status(&can_rx);
             if (rx_status == CAN_STATUS_COMPLETED) {
                 obd2_handle(can_rx.pt_data);
@@ -181,39 +178,41 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
     return retval;
 }
 
-void obd2_loop(void) {
-    uint8_t val = 0;
+uint8_t obd2_loop(void) {
+    uint8_t retval = 0;
     switch (obd2_loop_status) {
         case 0:
-            val = obd2_reqloop(OBD2_PID_ENGINE_COOLANT_TEMPERATURE);
+            retval = obd2_reqloop(OBD2_PID_ENGINE_SPEED);
             break;
         case 1:
-            val = obd2_reqloop(OBD2_PID_VEHICLE_SPEED);
+            retval = obd2_reqloop(OBD2_PID_VEHICLE_SPEED);
             break;
         case 2:
-            val = obd2_reqloop(OBD2_PID_ENGINE_SPEED);
+            retval = obd2_reqloop(OBD2_PID_ENGINE_COOLANT_TEMPERATURE);
             break;
 //        case 3:
-//            val = obd2_reqloop(OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED);
+//            retval = obd2_reqloop(OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED);
 //            break;
 //        case 2:
-//            val = obd2_reqloop(OBD2_PID_RUN_TIME_SINCE_ENGINE_START);
+//            retval = obd2_reqloop(OBD2_PID_RUN_TIME_SINCE_ENGINE_START);
 //            break;
 //        case 3:
-//            val = obd2_reqloop(OBD2_PID_FUEL_LEVEL);
+//            retval = obd2_reqloop(OBD2_PID_FUEL_LEVEL);
 //            break;
 //        case 4:
-//            val = obd2_reqloop(OBD2_PID_ODOMETER);
+//            retval = obd2_reqloop(OBD2_PID_ODOMETER);
 //            break;
         default:
             obd2_loop_status = 0;
-            val = 0;
+            retval = 0;
             break;
     }
 
-    if (val > 0) {
+    if (retval > 0) {
         obd2_loop_status++;
     }
+
+    return retval;
 }
 
 uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {

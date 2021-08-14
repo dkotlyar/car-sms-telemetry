@@ -494,7 +494,8 @@ void sim868_buffer_loop(void) {
     }
 }
 
-void sim868_loop(uint8_t powersave) {
+uint8_t sim868_loop(uint8_t powersave) {
+    uint8_t retval = 0;
     sim868_handle_buffer();
 
     if ((millis() - sim868_lastCommandTransmitTimestamp) > 1000 && sim868_status == SIM868_STATUS_IGNORE) {
@@ -585,7 +586,9 @@ void sim868_loop(uint8_t powersave) {
             sim868_pwr_off();
             if (!powersave) {
                 sim868_loop_state = SIM868_LOOP_INIT;
+                break;
             }
+            retval = 1;
             break;
         case SIM868_LOOP_OK:
             sim868_buffer_loop();
@@ -618,6 +621,8 @@ void sim868_loop(uint8_t powersave) {
             sim868_loop_state = SIM868_LOOP_INIT;
             break;
     }
+
+    return retval;
 }
 
 void sim868_post_async(const char *data) {

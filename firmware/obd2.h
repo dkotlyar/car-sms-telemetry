@@ -33,7 +33,7 @@ extern uint32_t obd2_timestamp;
 
 void obd2_init(void);
 void obd2_reset(void);
-void obd2_loop(void);
+uint8_t obd2_loop(void);
 //void obd2_write(uint8_t service_number, uint8_t pid_code, uint8_t A, uint8_t B, uint8_t C, uint8_t D);
 //void obd2_abort(uint8_t pid_code);
 uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code);

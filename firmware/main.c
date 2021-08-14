@@ -9,12 +9,19 @@
 #include "utils.h"
 #include <string.h>
 
+void setPowerMode(powermode_t pm);
+
 usart_t * main_usart;
 extern usart_t * sim868_usart;
 powermode_t pwrMode;
 
+ptimer_t main_powersaveTof;
+ptimer_t main_telemetryTon;
+ptimer_t main_obdTon;
+uint8_t main_sim868_work;
+
 extern uint32_t _millis;
-uint32_t timer2 = 0;
+uint16_t timer2 = 0;
 sleepmode_t sleepmode;
 // 125 Hz
 ISR(TIMER2_COMP_vect) {
@@ -23,13 +30,36 @@ ISR(TIMER2_COMP_vect) {
         _millis += 1000 / SLEEP_TIMER_FREQ;
     }
 
-    if (timer2 >= 10000UL * SLEEP_TIMER_FREQ) {
+    if (timer2 >= 10 * SLEEP_TIMER_FREQ) {
         if (SLEEP == sleepmode) {
-            blink(1);
             sleepmode = WAKEUP;
         }
         timer2 = 0;
     }
+
+//    static uint16_t keyPressed = 0;
+//#define READKEY_TIME    300UL // ms
+//#define READKEY_CYCLES  (READKEY_TIME * SLEEP_TIMER_FREQ / 1000)
+//    if (read_key()) {
+//        if (keyPressed < READKEY_CYCLES) {
+//            keyPressed++;
+//        } else if (READKEY_CYCLES == keyPressed) {
+//            switch (pwrMode) {
+//                case POWER_OFF:
+//                    setPowerMode(POWER_ON);
+//                    break;
+//                case POWER_ON:
+//                    setPowerMode(POWER_AUTOMATIC);
+//                    break;
+//                default:
+//                    setPowerMode(POWER_OFF);
+//                    break;
+//            }
+//            keyPressed = ~0;
+//        }
+//    } else {
+//        keyPressed = 0;
+//    }
 }
 
 void usart_rx(uint8_t data) {
@@ -56,6 +86,16 @@ void setPowerMode(powermode_t pm) {
             usart_println_sync(main_usart, "Power mode: OFF");
             break;
     }
+}
+
+void main_reset(void) {
+    _millis = 0;
+    obd2_reset();
+    sim868_reset();
+    pTimerReset(&main_powersaveTof);
+    pTimerReset(&main_telemetryTon);
+    pTimerReset(&main_obdTon);
+    main_sim868_work = 0;
 }
 
 void init(void) {
@@ -86,48 +126,17 @@ void init(void) {
 
     setPowerMode(DEFAULT_POWER_MODE);
     sleepmode = WORK;
-}
 
-void main_reset(void) {
-    _millis = 0;
-    obd2_reset();
-    sim868_reset();
+    main_reset();
 }
 
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
-    static uint16_t keyPressed = 0;
-    if (read_key()) {
-        if (keyPressed < 1000) {
-            keyPressed++;
-        } else if (1000 == keyPressed) {
-            switch (pwrMode) {
-                case POWER_OFF:
-                    setPowerMode(POWER_ON);
-                    break;
-                case POWER_ON:
-                    setPowerMode(POWER_AUTOMATIC);
-                    break;
-                default:
-                    setPowerMode(POWER_OFF);
-                    break;
-            }
-            keyPressed = ~0;
-        }
-    } else {
-        keyPressed = 0;
-    }
-
-    uint32_t _millis = millis();
-    obd2_loop();
-    static ptimer_t pston;
-    static ptimer_t telemetryTon;
-    static ptimer_t obdTon;
-
     uint8_t powersave = 0;
 
-    if (pton(&pston, 0 == obd2_get_runtime_since_engine_start(), 30000)) {
-        powersave = 1;
+    uint32_t _millis = millis();
+    if (obd2_loop()) { // change obd code
+        powersave = !ptof(&main_powersaveTof, obd2_get_runtime_since_engine_start() > 0, 30000);
     }
 
     if (POWER_OFF == pwrMode) {
@@ -136,22 +145,32 @@ void loop(void) {
         powersave = 0;
     }
 
-    sim868_loop(powersave);
+    main_sim868_work = main_sim868_work || main_powersaveTof.q;
+    if (main_sim868_work) {
+        if (sim868_loop(powersave)) { // sim868 sleep
+            main_sim868_work = 0;
+        }
+    }
+    if (!main_sim868_work && powersave) {
+        sleepmode = GOTOSLEEP;
+    }
 
-    if (pton(&obdTon, 1, 2000)) {
-        pTimerReset(&obdTon);
+#ifdef OBD2_DEBUG
+    if (pton(&main_obdTon, 1, 2000)) {
+        pTimerReset(&main_obdTon);
         char temp[12];
         usart_print_sync(main_usart, "> +OBD: ");
-        obd_log("%lu", millis()); usart_print_sync(main_usart, ",");
+        obd_log("%lu", _millis); usart_print_sync(main_usart, ",");
         obd_log("%d", obd2_engine_coolant_temperature); usart_print_sync(main_usart, ",");
         obd_log("%lu", obd2_get_runtime_since_engine_start()); usart_print_sync(main_usart, ",");
         obd_log("%u", obd2_engine_speed); usart_print_sync(main_usart, ",");
         obd_log("%u", obd2_vehicle_speed); usart_print_sync(main_usart, ",");
         obd_log("%lu", obd2_get_aprox_distance_traveled()); usart_println_sync(main_usart, "");
     }
+#endif
 
-    if (!powersave && pton(&telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
-        pTimerReset(&telemetryTon);
+    if (!powersave && pton(&main_telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
+        pTimerReset(&main_telemetryTon);
         char buf[SIM868_CHARBUFFER_LENGTH];
         sprintf(buf, "{\"ticks\":%lu,\"sim868_imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
@@ -174,14 +193,13 @@ int main(void) {
     OCR2A = ((F_CPU / 1024) / SLEEP_TIMER_FREQ) - 1;
     TIMSK2 |= (1<<OCIE2A);
     set_sleep_mode(SLEEP_MODE_PWR_SAVE);
-    sleep_enable();
 
     // WATCHDOG
-//    wdt_enable(WDTO_2S);
-//    if (MCUSR & (1<<WDRF)) {
-//        usart_println_sync(main_usart, "SYSTEM: Watchdog reset vector");
-//    }
-//    MCUSR &= ~(1<<WDRF);
+    wdt_enable(WDTO_2S);
+    if (MCUSR & (1<<WDRF)) {
+        usart_println_sync(main_usart, "SYSTEM: Watchdog reset vector");
+    }
+    MCUSR &= ~(1<<WDRF);
 	sei();
 
 #pragma clang diagnostic push
@@ -189,23 +207,28 @@ int main(void) {
 	while(1) {
 	    switch (sleepmode) {
 	        case GOTOSLEEP:
+	            long_blink(1);
 	            usart_println_sync(main_usart, "Enter sleep mode");
+//	            while (!(*(main_usart->UCSRA) & main_usart->readyToTransmit));
+                _delay_us(1000);
 	            timer2 = 0;
+	            wdt_disable();
+	            sim868_pwr_off();
+	            sleepmode = SLEEP;
+	            break;
 	        case SLEEP:
-                sleep_cpu();
-                sleep_mode();
+	            sleep_mode();
                 break;
 	        case WAKEUP:
+	            long_blink(2);
                 usart_println_sync(main_usart, "Leave sleep mode");
                 main_reset();
+                wdt_enable(WDTO_2S);
                 sleepmode = WORK;
                 break;
 	        default:
                 loop();
                 wdt_reset();
-                if (millis() > 3000) {
-                    sleepmode = GOTOSLEEP;
-                }
                 break;
 	    }
 	}
