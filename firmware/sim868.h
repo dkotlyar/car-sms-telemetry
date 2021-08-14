@@ -67,7 +67,7 @@ void sim868_init(void);
 void sim868_reset(void);
 void sim868_receive(uint8_t data);
 void sim868_handle_buffer(void);
-void sim868_loop(uint8_t powersave);
+uint8_t sim868_loop(uint8_t powersave);
 void sim868_post_async(const char *data);
 
 #define SIM868_async_wait() {if (sim868_status != SIM868_STATUS_OK && sim868_status != SIM868_STATUS_ERROR) {break;}}

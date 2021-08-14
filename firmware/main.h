@@ -39,6 +39,7 @@ typedef enum {
 #define MAIN_USART      1   // Specified USART port for main communication
 #define SIM868_USART    0   // Specified USART port for SIM868 module
 //#define SIM868_USART_BRIDGE
+#define OBD2_DEBUG
 
 #define CAN_BAUDRATE   500        // in kBit
 
@@ -47,7 +48,7 @@ typedef enum {
 #define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
-#define DEFAULT_POWER_MODE  POWER_OFF
+#define DEFAULT_POWER_MODE  POWER_AUTOMATIC
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
@@ -55,8 +56,9 @@ typedef enum {
 #define LED_ON()    {SETBIT_0(LED_PORT, LED_Pn);}
 #define LED_OFF()   {SETBIT_1(LED_PORT, LED_Pn);}
 #define _blink()    {LED_ON();_delay_ms(50);LED_OFF();_delay_ms(50);}
-#define long_blink(){LED_ON();_delay_ms(400);LED_OFF();_delay_ms(250);}
-#define blink(n)    {for (int i=0;i<n;i++){_blink();}}
+#define _long_blink(){LED_ON();_delay_ms(400);LED_OFF();_delay_ms(250);}
+#define blink(n)    {for (int i=0;i<(n);i++){_blink();}}
+#define long_blink(n){for (int i=0;i<(n);i++){_long_blink();}}
 
 #define BTN_DDR     DDRE
 #define BTN_PIN     PINE
