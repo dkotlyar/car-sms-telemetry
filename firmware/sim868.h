@@ -61,10 +61,6 @@
 
 #define SIM868_LOOP_RET_POWERDOWN   1
 
-extern char sim868_imei[20];
-extern char sim868_cgnurc[115];
-extern uint32_t sim868_cgnurc_timestamp;
-
 void sim868_init(void);
 void sim868_reset(void);
 void sim868_receive(uint8_t data);

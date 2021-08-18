@@ -22,47 +22,29 @@ ptimer_t main_telemetryTon;
 ptimer_t main_obdTon;
 uint8_t main_sim868_work;
 extern uint8_t sim868_hasNewFile;
+extern char sim868_imei[SIM868_IMEI_SIZE];
+extern char sim868_cgnurc[SIM868_CGNURC_SIZE];
+extern uint32_t sim868_cgnurc_timestamp;
+uint8_t main_obd2_loop_passed;
 
 extern uint32_t _millis;
 uint16_t timer2 = 0;
 sleepmode_t sleepmode;
 // 125 Hz
 ISR(TIMER2_COMP_vect) {
-    timer2++;
     if (SLEEP == sleepmode) {
-        _millis += 1000 / SLEEP_TIMER_FREQ;
-    }
+        timer2++;
+        //    if (SLEEP == sleepmode) {
+        //        _millis += 1000 / SLEEP_TIMER_FREQ;
+        //    }
 
-    if (timer2 >= 10 * SLEEP_TIMER_FREQ) {
-        if (SLEEP == sleepmode) {
+        if (timer2 >= 10 * SLEEP_TIMER_FREQ) {
             sleepmode = WAKEUP;
+            timer2 = 0;
         }
+    } else {
         timer2 = 0;
     }
-
-//    static uint16_t keyPressed = 0;
-//#define READKEY_TIME    300UL // ms
-//#define READKEY_CYCLES  (READKEY_TIME * SLEEP_TIMER_FREQ / 1000)
-//    if (read_key()) {
-//        if (keyPressed < READKEY_CYCLES) {
-//            keyPressed++;
-//        } else if (READKEY_CYCLES == keyPressed) {
-//            switch (pwrMode) {
-//                case POWER_OFF:
-//                    setPowerMode(POWER_ON);
-//                    break;
-//                case POWER_ON:
-//                    setPowerMode(POWER_AUTOMATIC);
-//                    break;
-//                default:
-//                    setPowerMode(POWER_OFF);
-//                    break;
-//            }
-//            keyPressed = ~0;
-//        }
-//    } else {
-//        keyPressed = 0;
-//    }
 }
 
 void usart_rx(uint8_t data) {
@@ -95,12 +77,13 @@ void main_reset(void) {
     _millis = 0;
     obd2_reset();
     sim868_reset();
-    powersave = 0;
+    powersave = 1;
     pTimerReset(&main_powerTon);
     pTimerReset(&main_powersaveTof_long);
     pTimerReset(&main_telemetryTon);
     pTimerReset(&main_obdTon);
     main_sim868_work = 0;
+    main_obd2_loop_passed = 0;
 }
 
 void init(void) {
@@ -139,8 +122,9 @@ void loop(void) {
 #ifndef SIM868_USART_BRIDGE
     uint32_t _millis = millis();
     if (obd2_loop()) { // change obd code
-        uint8_t engine = obd2_get_runtime_since_engine_start() > 0;
-        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 10000), 60000) && sim868_hasNewFile);
+        main_obd2_loop_passed = 1;
+        uint8_t engine = obd2_engine_working();
+        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000) && sim868_hasNewFile);
         powersave = !p;
     }
 
@@ -157,7 +141,7 @@ void loop(void) {
             main_sim868_work = 0;
         }
     }
-    if (!main_sim868_work && powersave) {
+    if (!main_sim868_work && powersave && main_obd2_loop_passed) {
         sleepmode = GOTOSLEEP;
     }
 
@@ -175,15 +159,17 @@ void loop(void) {
     }
 #endif
 
-    if (!powersave && pton(&main_telemetryTon, 1, obd2_get_runtime_since_engine_start() > 0 ? 5000 : 60000)) {
+    if (main_obd2_loop_passed && !powersave && pton(&main_telemetryTon, obd2_engine_working(), 5000)) {
         pTimerReset(&main_telemetryTon);
         char buf[SIM868_CHARBUFFER_LENGTH];
-        sprintf(buf, "{\"ticks\":%lu,\"sim868_imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
+        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
                 _millis, sim868_imei, sim868_cgnurc, sim868_cgnurc_timestamp,
                 obd2_timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
                 obd2_engine_speed, obd2_vehicle_speed);
         sim868_post_async(buf);
+        memset(sim868_cgnurc, 0, SIM868_CGNURC_SIZE);
+        sim868_cgnurc_timestamp = 0;
     }
 #endif
 }

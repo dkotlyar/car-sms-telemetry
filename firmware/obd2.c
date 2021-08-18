@@ -16,6 +16,7 @@ uint16_t obd2_distance_traveled_since_codes_cleared;
 uint32_t obd2_aprox_distance_traveled = 0; // расстояние в мм * 3.6
 uint32_t obd2_aprox_distance_traveled_lasttimestamp = 0;
 uint32_t obd2_engine_start_time = ~0;
+uint32_t obd2_engine_stop_time = ~0;
 uint32_t obd2_timestamp = 0;
 
 st_cmd_t can_rx;
@@ -43,10 +44,14 @@ void obd2_reset(void) {
     obd2_aprox_distance_traveled = 0;
     obd2_aprox_distance_traveled_lasttimestamp = 0;
     obd2_engine_start_time = ~0;
+    obd2_engine_stop_time = ~0;
     obd2_timestamp = 0;
     obd2_reqloop_status = 0;
     obd2_reqloop_watchdog = 0;
     obd2_loop_status = 0;
+    obd2_engine_speed = 0;
+    obd2_vehicle_speed = 0;
+    obd2_engine_coolant_temperature = 0;
 }
 
 void obd2_handle(uint8_t* pt_data) {
@@ -83,10 +88,11 @@ void obd2_handle(uint8_t* pt_data) {
             break;
         case OBD2_PID_ENGINE_SPEED:
             obd2_engine_speed = ((payload[0] << 8) | payload[1]) / 4;
-            if (obd2_engine_speed < 500) {
-                obd2_engine_start_time = ~0;
-            } else if (obd2_engine_start_time == ~0) {
-                obd2_engine_start_time = millis();
+            if (obd2_engine_speed < 300) {
+                obd2_engine_stop_time = MIN(millis(), obd2_engine_stop_time);
+            } else {
+                obd2_engine_start_time = MIN(millis(), obd2_engine_start_time);
+                obd2_engine_stop_time = ~0;
             }
             break;
         case OBD2_PID_DISTANCE_TRAVELED_SINCE_CODES_CLEARED:
@@ -179,7 +185,7 @@ uint8_t obd2_reqloop(uint8_t pid_code) {
 }
 
 uint8_t obd2_loop(void) {
-    uint8_t retval = 0;
+    uint8_t retval;
     switch (obd2_loop_status) {
         case 0:
             retval = obd2_reqloop(OBD2_PID_ENGINE_SPEED);
@@ -208,11 +214,24 @@ uint8_t obd2_loop(void) {
             break;
     }
 
-    if (retval > 0) {
-        obd2_loop_status++;
+    if ((millis() - obd2_timestamp) > 30000) {
+        obd2_engine_start_time = ~0;
+        obd2_engine_stop_time = ~0;
+        obd2_engine_speed = 0;
+        obd2_vehicle_speed = 0;
+        obd2_engine_coolant_temperature = 0;
+    }
+    if (obd2_engine_stop_time != ~0 && (millis() - obd2_engine_stop_time) > 5000) {
+        obd2_engine_start_time = ~0;
+        obd2_engine_stop_time = ~0;
     }
 
-    return retval;
+    if (retval > 0) {
+        obd2_loop_status++;
+        return 1;
+    }
+
+    return 0;
 }
 
 uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
@@ -292,11 +311,13 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code) {
 // Возвращает время работы двигателя
 // Если двигатель не запущен или таймаут связи с ЭБУ, то возвращается 0
 uint32_t obd2_get_runtime_since_engine_start(void) {
-    if (obd2_engine_start_time == ~0 || (millis() - obd2_timestamp) > 5000) {
+    uint32_t stop_time = MIN(millis(), obd2_engine_stop_time);
+    if (obd2_engine_start_time == ~0) {
         obd2_engine_start_time = ~0;
+        obd2_engine_stop_time = ~0;
         return 0;
     } else {
-        return millis() - obd2_engine_start_time;
+        return stop_time - obd2_engine_start_time + 1;
     }
 }
 

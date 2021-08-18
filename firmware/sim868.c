@@ -42,6 +42,7 @@ uint32_t sim868_lastCommandTransmitTimestamp;
 char sim868_imei[SIM868_IMEI_SIZE] = {0};
 char sim868_cgnurc[SIM868_CGNURC_SIZE] = {0};
 uint32_t sim868_cgnurc_timestamp;
+uint32_t sim868_cgnurc_timestamp2;
 
 #ifdef SIM868_DEBUG
 uint8_t startmsg = 1;
@@ -87,6 +88,7 @@ void sim868_reset(void) {
     memset(sim868_imei, 0, SIM868_IMEI_SIZE);
     memset(sim868_cgnurc, 0, SIM868_CGNURC_SIZE);
     sim868_cgnurc_timestamp = 0;
+    sim868_cgnurc_timestamp2 = 0;
 
 #ifdef SIM868_DEBUG
     startmsg = 1;
@@ -191,6 +193,7 @@ void sim868_handle_buffer(void) {
         memset(sim868_cgnurc, 0, 115);
         strcpy(sim868_cgnurc, bank + 10);
         sim868_cgnurc_timestamp = millis();
+        sim868_cgnurc_timestamp2 = millis();
     } else if (memcmp(bank, "+HTTPACTION: ", 13) == 0) {
         if (memcmp(bank + 15, "200", 3) == 0) {
             sim868_httpStatus = SIM868_HTTP_200;
@@ -552,6 +555,10 @@ uint8_t sim868_loop(uint8_t powersave) {
             break;
         case SIM868_LOOP_MKBUFFER:
             SIM868_async_wait();
+            if (sim868_imei[0] == 0) {
+                sim868_loop_state = SIM868_LOOP_GET_IMEI;
+                break;
+            }
             SIM868_busy();
             sim868_putln("AT+FSMKDIR=C:\\buffer\\");
             sim868_loop_state = SIM868_LOOP_READBUFFERINDEX;
@@ -595,6 +602,10 @@ uint8_t sim868_loop(uint8_t powersave) {
             sim868_http_loop();
             if (powersave) {
                 sim868_loop_state = SIM868_LOOP_DISABLE_GNSS_1;
+            }
+            if ((millis() - sim868_cgnurc_timestamp2) > 10000) {
+                sim868_loop_state = SIM868_LOOP_ENABLE_GNSS_1;
+                sim868_cgnurc_timestamp2 = millis();
             }
             break;
         case SIM868_LOOP_DISABLE_GNSS_1:
