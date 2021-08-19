@@ -24,6 +24,7 @@ uint8_t main_sim868_work;
 extern uint8_t sim868_hasNewFile;
 extern char sim868_imei[SIM868_IMEI_SIZE];
 extern char sim868_cgnurc[SIM868_CGNURC_SIZE];
+extern char sim868_gps_session[SIM868_GPS_SESSION_SIZE];
 extern uint32_t sim868_cgnurc_timestamp;
 uint8_t main_obd2_loop_passed;
 
@@ -162,9 +163,9 @@ void loop(void) {
     if (main_obd2_loop_passed && !powersave && pton(&main_telemetryTon, obd2_engine_working(), 5000)) {
         pTimerReset(&main_telemetryTon);
         char buf[SIM868_CHARBUFFER_LENGTH];
-        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,"
+        sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,\"session\":\"%s\","
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
-                _millis, sim868_imei, sim868_cgnurc, sim868_cgnurc_timestamp,
+                     _millis, sim868_imei, sim868_cgnurc, sim868_cgnurc_timestamp, sim868_gps_session,
                 obd2_timestamp, obd2_get_runtime_since_engine_start(), obd2_get_aprox_distance_traveled(),
                 obd2_engine_speed, obd2_vehicle_speed);
         sim868_post_async(buf);
@@ -177,6 +178,10 @@ void loop(void) {
 int main(void) {
 	cli();
 	init();
+	_delay_ms(300);
+    blink(1);
+    _delay_ms(300);
+    blink(1);
 
 	// SLEEP TIMER
     // CTC, prescaler: 1024

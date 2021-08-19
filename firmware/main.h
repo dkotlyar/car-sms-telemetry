@@ -43,12 +43,13 @@ typedef enum {
 
 #define CAN_BAUDRATE   500        // in kBit
 
-#define SIM868_CHARBUFFER_LENGTH    300
+#define SIM868_CHARBUFFER_LENGTH    320
 #define SIM868_TELEMETRY_URL        "http://dkotlyar.ru:8000/telemetry"
 #define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
-#define DEFAULT_POWER_MODE  POWER_AUTOMATIC
+//#define DEFAULT_POWER_MODE  POWER_AUTOMATIC
+#define DEFAULT_POWER_MODE  POWER_ON
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
