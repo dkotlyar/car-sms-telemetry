@@ -21,6 +21,7 @@
 #define SIM868_IMEI_SIZE        20
 #define SIM868_CGNURC_SIZE      115
 #define SIM868_FILENAME_SIZE    8
+#define SIM868_GPS_SESSION_SIZE 20
 
 #define SIM868_BUFFER_BANKS     4
 

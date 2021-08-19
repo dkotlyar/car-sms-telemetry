@@ -43,6 +43,7 @@ char sim868_imei[SIM868_IMEI_SIZE] = {0};
 char sim868_cgnurc[SIM868_CGNURC_SIZE] = {0};
 uint32_t sim868_cgnurc_timestamp;
 uint32_t sim868_cgnurc_timestamp2;
+char sim868_gps_session[SIM868_GPS_SESSION_SIZE] = {0};
 
 #ifdef SIM868_DEBUG
 uint8_t startmsg = 1;
@@ -87,6 +88,7 @@ void sim868_reset(void) {
 
     memset(sim868_imei, 0, SIM868_IMEI_SIZE);
     memset(sim868_cgnurc, 0, SIM868_CGNURC_SIZE);
+    memset(sim868_gps_session, 0, SIM868_GPS_SESSION_SIZE);
     sim868_cgnurc_timestamp = 0;
     sim868_cgnurc_timestamp2 = 0;
 
@@ -194,6 +196,13 @@ void sim868_handle_buffer(void) {
         strcpy(sim868_cgnurc, bank + 10);
         sim868_cgnurc_timestamp = millis();
         sim868_cgnurc_timestamp2 = millis();
+        if (sim868_gps_session[0] == 0) {
+            if (bank[0] != 0 && memcmp(bank + 14, "1980", 4) != 0) {
+                memcpy(sim868_gps_session, bank + 14, 18); // 20210819143341.000
+                sim868_gps_session[18] = 0;
+                sim868_gps_session[19] = 0;
+            }
+        }
     } else if (memcmp(bank, "+HTTPACTION: ", 13) == 0) {
         if (memcmp(bank + 15, "200", 3) == 0) {
             sim868_httpStatus = SIM868_HTTP_200;
