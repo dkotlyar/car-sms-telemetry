@@ -48,7 +48,8 @@ typedef enum {
 #define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
-#define DEFAULT_POWER_MODE  POWER_AUTOMATIC
+//#define POWERMODE_OFF
+//#define POWERMODE_ON
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
