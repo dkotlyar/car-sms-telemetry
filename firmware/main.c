@@ -13,7 +13,6 @@ void setPowerMode(powermode_t pm);
 
 usart_t * main_usart;
 extern usart_t * sim868_usart;
-powermode_t pwrMode;
 
 uint8_t powersave;
 ptimer_t main_powerTon;
@@ -52,25 +51,6 @@ void usart_rx(uint8_t data) {
     usart_send_sync(main_usart, data); // echo
     usart_send_sync(sim868_usart, data);
 #endif
-}
-
-void setPowerMode(powermode_t pm) {
-    pwrMode = pm;
-    switch (pwrMode) {
-        case POWER_ON:
-            blink(2);
-            usart_println_sync(main_usart, "Power mode: ON");
-            break;
-        case POWER_AUTOMATIC:
-            blink(3);
-            usart_println_sync(main_usart, "Power mode: AUTOMATIC");
-            break;
-        default:
-            pwrMode = POWER_OFF;
-            blink(1);
-            usart_println_sync(main_usart, "Power mode: OFF");
-            break;
-    }
 }
 
 void main_reset(void) {
@@ -112,7 +92,6 @@ void init(void) {
     usart_println_sync(main_usart, "SIM868 Bridge mode");
 #endif
 
-    setPowerMode(DEFAULT_POWER_MODE);
     sleepmode = WORK;
 
     main_reset();
@@ -128,11 +107,12 @@ void loop(void) {
         powersave = !p;
     }
 
-    if (POWER_OFF == pwrMode) {
-        powersave = 1;
-    } else if (POWER_ON == pwrMode) {
-        powersave = 0;
-    }
+#ifdef POWERMODE_OFF
+    powersave = 1;
+#endif
+#ifdef POWERMODE_ON
+    powersave = 0;
+#endif
 
     main_sim868_work = main_sim868_work || !powersave;
     if (main_sim868_work) {
