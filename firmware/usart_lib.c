@@ -59,7 +59,7 @@ void usart_init(usart_t *usart, uint16_t baud) {
 #pragma ide diagnostic ignored "LoopDoesntUseConditionVariableInspection"
 void usart_send_sync(usart_t *usart, uint8_t data) {
     // ожидаем доступности регистра для записи
-    while (!(*(usart->UCSRA) & usart->readyToTransmit));
+    while (!(*(usart->UCSRA) & usart->readyToTransmit)) {}
     *usart->UDR = data; // записываем данные в регистр
 }
 #pragma clang diagnostic pop
@@ -68,6 +68,7 @@ void usart_print_sync(usart_t *usart, const char *str) {
     while (*str != 0) {
         usart_send_sync(usart, *str);
         str++;
+        wdt_reset();
     }
 }
 
