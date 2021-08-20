@@ -9,11 +9,8 @@
 #include "utils.h"
 #include <string.h>
 
-void setPowerMode(powermode_t pm);
-
-usart_t * main_usart;
-extern usart_t * sim868_usart;
-powermode_t pwrMode;
+//usart_t * main_usart;
+//extern usart_t * sim868_usart;
 
 uint8_t powersave;
 ptimer_t main_powerTon;
@@ -55,25 +52,6 @@ void usart_rx(uint8_t data) {
 #endif
 }
 
-void setPowerMode(powermode_t pm) {
-    pwrMode = pm;
-    switch (pwrMode) {
-        case POWER_ON:
-            blink(2);
-            usart_println_sync(main_usart, "Power mode: ON");
-            break;
-        case POWER_AUTOMATIC:
-            blink(3);
-            usart_println_sync(main_usart, "Power mode: AUTOMATIC");
-            break;
-        default:
-            pwrMode = POWER_OFF;
-            blink(1);
-            usart_println_sync(main_usart, "Power mode: OFF");
-            break;
-    }
-}
-
 void main_reset(void) {
     _millis = 0;
     obd2_reset();
@@ -96,11 +74,6 @@ void init(void) {
 
     millis_init();
 
-#   if MAIN_USART == 0
-    main_usart = &usart0;
-#   elif MAIN_USART == 1
-    main_usart = &usart1;
-#   endif
     main_usart->rx_vec = usart_rx;
 
     usart_init(main_usart, 57600);
@@ -108,12 +81,11 @@ void init(void) {
     obd2_init();
     sim868_init();
 
-    usart_println_sync(main_usart, "Start up firmware. Build 6");
+    usart_println_sync(main_usart, "Start up firmware. Build 7");
 #ifdef SIM868_USART_BRIDGE
     usart_println_sync(main_usart, "SIM868 Bridge mode");
 #endif
 
-    setPowerMode(DEFAULT_POWER_MODE);
     sleepmode = WORK;
 
     main_reset();
@@ -122,18 +94,19 @@ void init(void) {
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
     uint32_t _millis = millis();
-    if (obd2_loop()) { // change obd code
-        main_obd2_loop_passed = 1;
-        uint8_t engine = obd2_engine_working();
-        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000) && sim868_hasNewFile);
-        powersave = !p;
-    }
+//    if (obd2_loop()) { // change obd code
+//        main_obd2_loop_passed = 1;
+//        uint8_t engine = obd2_engine_working();
+//        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000) && sim868_hasNewFile);
+//        powersave = !p;
+//    }
 
-    if (POWER_OFF == pwrMode) {
-        powersave = 1;
-    } else if (POWER_ON == pwrMode) {
-        powersave = 0;
-    }
+#ifdef POWERMODE_OFF
+    powersave = 1;
+#endif
+#ifdef POWERMODE_ON
+    powersave = 0;
+#endif
 
     main_sim868_work = main_sim868_work || !powersave;
     if (main_sim868_work) {
@@ -219,12 +192,13 @@ int main(void) {
 	            long_blink(2);
                 usart_println_sync(main_usart, "Leave sleep mode");
                 main_reset();
-                wdt_enable(WDTO_2S);
+//                wdt_enable(WDTO_2S);
                 sleepmode = WORK;
                 break;
 	        default:
-                loop();
+//                wdr();
                 wdt_reset();
+                loop();
                 break;
 	    }
 	}

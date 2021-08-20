@@ -20,12 +20,6 @@
 // PROJECT SECTION
 
 typedef enum {
-    POWER_OFF,
-    POWER_ON,
-    POWER_AUTOMATIC
-} powermode_t;
-
-typedef enum {
     WORK,
     GOTOSLEEP,
     SLEEP,
@@ -36,8 +30,8 @@ typedef enum {
 #define USART1_ENABLE
 #define CAN_ENABLE
 
-#define MAIN_USART      1   // Specified USART port for main communication
-#define SIM868_USART    0   // Specified USART port for SIM868 module
+#define main_usart      (&usart1)
+#define sim868_usart    (&usart0)
 //#define SIM868_USART_BRIDGE
 #define OBD2_DEBUG
 
@@ -48,8 +42,8 @@ typedef enum {
 #define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
-//#define DEFAULT_POWER_MODE  POWER_AUTOMATIC
-#define DEFAULT_POWER_MODE  POWER_ON
+//#define POWERMODE_OFF
+#define POWERMODE_ON
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE

@@ -5,8 +5,6 @@
 #include <stdio.h>
 #include "millis.h"
 
-usart_t * sim868_usart;
-extern usart_t * main_usart;
 
 #if SIM868_CHARBUFFER_LENGTH <= 0xFF
 uint8_t sim868_rec_buffer_index;
@@ -50,11 +48,6 @@ uint8_t startmsg = 1;
 #endif
 
 void sim868_init(void) {
-#   if SIM868_USART == 0
-    sim868_usart = &usart0;
-#   elif SIM868_USART == 1
-    sim868_usart = &usart1;
-#   endif
     sim868_usart->rx_vec = sim868_receive;
     usart_init(sim868_usart, 57600);
     sim868_reset();
@@ -133,18 +126,18 @@ void sim868_receive(uint8_t data) {
             flag = 1;
         }
     } else {
-        uint8_t *bank = sim868_rec_buffer[sim868_rec_buffer_bank_write];
+        char *bank = sim868_rec_buffer[sim868_rec_buffer_bank_write];
         if (data == '\n' || data == '\r') {
             if (sim868_rec_buffer_index > 0) {
                 bank[sim868_rec_buffer_index] = 0;
                 flag = 1;
             }
         } else {
-            if (sim868_rec_buffer_index < SIM868_CHARBUFFER_LENGTH) {
-                bank[sim868_rec_buffer_index] = data;
+            if (sim868_rec_buffer_index < (SIM868_CHARBUFFER_LENGTH - 1)) {
+                bank[sim868_rec_buffer_index] = (char)data;
                 sim868_rec_buffer_index++;
             } else {
-                bank[SIM868_CHARBUFFER_LENGTH] = 0;
+                bank[SIM868_CHARBUFFER_LENGTH - 1] = 0;
             }
         }
     }
@@ -172,7 +165,7 @@ void sim868_handle_buffer(void) {
 
     cli();
     char bank[SIM868_CHARBUFFER_LENGTH] = {0};
-    strcpy(bank, sim868_rec_buffer[sim868_rec_buffer_bank_read]);
+    strncpy(bank, sim868_rec_buffer[sim868_rec_buffer_bank_read], SIM868_CHARBUFFER_LENGTH);
     sim868_rec_buffer_bank_read++;
     if (sim868_rec_buffer_bank_read >= SIM868_BUFFER_BANKS) {
         sim868_rec_buffer_bank_read = 0;
@@ -192,8 +185,8 @@ void sim868_handle_buffer(void) {
         sim868_loop_state = SIM868_LOOP_CPIN_READY;
         sim868_status = SIM868_STATUS_OK;
     } else if (memcmp(bank, "+UGNSINF: ", 10) == 0) {
-        memset(sim868_cgnurc, 0, 115);
-        strcpy(sim868_cgnurc, bank + 10);
+        memset(sim868_cgnurc, 0, SIM868_CGNURC_SIZE);
+        strncpy(sim868_cgnurc, bank + 10, SIM868_CGNURC_SIZE);
         sim868_cgnurc_timestamp = millis();
         sim868_cgnurc_timestamp2 = millis();
         if (sim868_gps_session[0] == 0) {
@@ -229,18 +222,18 @@ void sim868_handle_buffer(void) {
     } else {
         switch (sim868_status) {
             case SIM868_STATUS_WAIT_IMEI:
-                memset(sim868_imei, 0, 20);
-                strcpy(sim868_imei, bank);
+                memset(sim868_imei, 0, SIM868_IMEI_SIZE);
+                strncpy(sim868_imei, bank, SIM868_IMEI_SIZE);
                 SIM868_busy();
                 break;
             case SIM868_STATUS_WAIT_FILENAME:
-                memset(sim868_fileReadName, 0, 8);
-                strcpy(sim868_fileReadName, bank);
+                memset(sim868_fileReadName, 0, SIM868_FILENAME_SIZE);
+                strncpy(sim868_fileReadName, bank, SIM868_FILENAME_SIZE);
                 sim868_status = SIM868_STATUS_IGNORE;
                 break;
             case SIM868_STATUS_WAIT_FILECONTENT:
                 memset(sim868_fileReadBuffer, 0, SIM868_CHARBUFFER_LENGTH);
-                strcpy(sim868_fileReadBuffer, bank);
+                strncpy(sim868_fileReadBuffer, bank, SIM868_CHARBUFFER_LENGTH);
                 SIM868_busy();
                 break;
             case SIM868_STATUS_WAIT_BUFFERINDEX:
@@ -437,7 +430,7 @@ void sim868_buffer_loop(void) {
     switch (sim868_bufferloop_state) {
         case 0:
             if (sim868_httpBuffer[0] != 0) {
-                strcpy(sim868_fileWriteBuffer, sim868_httpBuffer);
+                strncpy(sim868_fileWriteBuffer, sim868_httpBuffer, SIM868_CHARBUFFER_LENGTH);
                 sim868_httpBuffer[0] = 0;
                 sim868_bufferloop_state++;
             }
@@ -648,7 +641,7 @@ uint8_t sim868_loop(uint8_t powersave) {
 void sim868_post_async(const char *data) {
     if (sim868_httpBuffer[0] == 0) {
         memset(sim868_httpBuffer, 0, SIM868_CHARBUFFER_LENGTH);
-        strcpy(sim868_httpBuffer, data);
+        strncpy(sim868_httpBuffer, data, SIM868_CHARBUFFER_LENGTH);
     } else {
         // Пока что игнорим пакеты, если http буффер занят
     }
