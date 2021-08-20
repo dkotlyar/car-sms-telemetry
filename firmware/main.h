@@ -20,12 +20,6 @@
 // PROJECT SECTION
 
 typedef enum {
-    POWER_OFF,
-    POWER_ON,
-    POWER_AUTOMATIC
-} powermode_t;
-
-typedef enum {
     WORK,
     GOTOSLEEP,
     SLEEP,
@@ -36,20 +30,22 @@ typedef enum {
 #define USART1_ENABLE
 #define CAN_ENABLE
 
-#define MAIN_USART      1   // Specified USART port for main communication
-#define SIM868_USART    0   // Specified USART port for SIM868 module
+#define main_usart      (&usart1)
+#define sim868_usart    (&usart0)
+//#define MAIN_USART      1   // Specified USART port for main communication
+//#define SIM868_USART    0   // Specified USART port for SIM868 module
 //#define SIM868_USART_BRIDGE
 #define OBD2_DEBUG
 
 #define CAN_BAUDRATE   500        // in kBit
 
-#define SIM868_CHARBUFFER_LENGTH    300
+#define SIM868_CHARBUFFER_LENGTH    320
 #define SIM868_TELEMETRY_URL        "http://dkotlyar.ru:8000/telemetry"
 #define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
 //#define POWERMODE_OFF
-//#define POWERMODE_ON
+#define POWERMODE_ON
 
 #define LED_DDR	    DDRE
 #define LED_PORT	PORTE
@@ -73,5 +69,7 @@ typedef enum {
 #define sim868_pwr_off(){SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 
 #define obd_log(frmt, var) { sprintf(temp, frmt, var); usart_print_sync(main_usart, temp); }
+
+#define wdr() { wdt_reset(); blink(1); }
 
 #endif

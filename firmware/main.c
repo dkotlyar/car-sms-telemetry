@@ -9,10 +9,8 @@
 #include "utils.h"
 #include <string.h>
 
-void setPowerMode(powermode_t pm);
-
-usart_t * main_usart;
-extern usart_t * sim868_usart;
+//usart_t * main_usart;
+//extern usart_t * sim868_usart;
 
 uint8_t powersave;
 ptimer_t main_powerTon;
@@ -75,11 +73,11 @@ void init(void) {
 
     millis_init();
 
-#   if MAIN_USART == 0
-    main_usart = &usart0;
-#   elif MAIN_USART == 1
-    main_usart = &usart1;
-#   endif
+//#   if MAIN_USART == 0
+//    main_usart = &usart0;
+//#   elif MAIN_USART == 1
+//    main_usart = &usart1;
+//#   endif
     main_usart->rx_vec = usart_rx;
 
     usart_init(main_usart, 57600);
@@ -194,12 +192,13 @@ int main(void) {
 	            long_blink(2);
                 usart_println_sync(main_usart, "Leave sleep mode");
                 main_reset();
-                wdt_enable(WDTO_2S);
+//                wdt_enable(WDTO_2S);
                 sleepmode = WORK;
                 break;
 	        default:
-                loop();
+//                wdr();
                 wdt_reset();
+                loop();
                 break;
 	    }
 	}
