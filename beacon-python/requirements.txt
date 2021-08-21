@@ -1,2 +1,3 @@
 pyserial
 pymodbus
+psycopg2-binary
