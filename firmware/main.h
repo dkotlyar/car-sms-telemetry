@@ -10,7 +10,6 @@
 #include <avr/interrupt.h>
 #include <avr/wdt.h>
 #include <avr/sleep.h>
-#include "usart_lib.h"
 
 #define SETBIT(reg, bit, value)     {if (value) {SETBIT_1(reg, bit)} else {SETBIT_0(reg, bit)}}
 #define SETBIT_1(reg, bit)          {reg |= (1<<(bit));}
@@ -26,20 +25,7 @@ typedef enum {
     WAKEUP
 } sleepmode_t;
 
-#define USART0_ENABLE
-#define USART1_ENABLE
-#define CAN_ENABLE
-
-#define main_usart      (&usart1)
-#define sim868_usart    (&usart0)
-//#define SIM868_USART_BRIDGE
-#define OBD2_DEBUG
-
 #define CAN_BAUDRATE   500        // in kBit
-
-#define SIM868_CHARBUFFER_LENGTH    320
-#define SIM868_TELEMETRY_URL        "http://dkotlyar.ru:8000/telemetry"
-#define SIM868_CGNURC               "1"
 
 #define SLEEP_TIMER_FREQ    125 // Hz
 //#define POWERMODE_OFF
@@ -66,6 +52,10 @@ typedef enum {
 #define sim868_pwr_on() {SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 #define sim868_pwr_off(){SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 
-#define obd_log(frmt, var) { sprintf(temp, frmt, var); usart_print_sync(main_usart, temp); }
+#define modbus_put8(i, valueH, valueL) {inputRegisters[i] = ((valueH)<<8) | (valueL);}
+#define modbus_put16(i, value) {inputRegisters[i] = (value);}
+#define modbus_put32(i, j, value) { \
+    inputRegisters[i] = (value) & 0xFFFF;\
+    inputRegisters[j] = ((value) >> 16) & 0xFFFF;}
 
 #endif

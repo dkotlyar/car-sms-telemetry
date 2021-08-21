@@ -1,5 +1,6 @@
 #include "main.h"
 #include "millis.h"
+#include "modbus.h"
 
 uint32_t _millis = 0;
 uint32_t millis(void) {
@@ -19,7 +20,15 @@ void millis_init(void) {
     TIMSK0 |= (1<<OCIE0A);
 }
 ISR(TIMER0_COMP_vect) {
-    _millis++;
+    static uint8_t sck = 0;
+    if (++sck == 10) {
+        // 1 kHz
+        _millis++;
+        sck = 0;
+    }
+
+    // 10 kHz
+    modbus_tickTimer();
 }
 #elif defined(__AVR_ATmega128__)
 void millis_init(void) {
