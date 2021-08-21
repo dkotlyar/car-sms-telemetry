@@ -1,0 +1,6 @@
+.dockerignore
+.idea/
+__pycache__/
+venv/
+beacon/settings-dev.py
+beacon_main/migrations/
