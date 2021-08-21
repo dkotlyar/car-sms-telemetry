@@ -3,6 +3,10 @@ from django.forms import model_to_dict
 
 
 def get_or_default(obj, field, default=None):
+    if type(field) == list or type(field) == tuple:
+        for f in field:
+            if f in obj:
+                return obj[f]
     return obj[field] if field in obj else default
 
 def to_dict(instance, ignore_to_dict=False, exclude=None):
