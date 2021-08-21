@@ -5,3 +5,4 @@ syntax: regexp
 .*/release
 .*/\.idea
 .*\.orig
+.*/node_modules/.*
