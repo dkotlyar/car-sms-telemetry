@@ -94,12 +94,12 @@ void init(void) {
 void loop(void) {
 #ifndef SIM868_USART_BRIDGE
     uint32_t _millis = millis();
-//    if (obd2_loop()) { // change obd code
-//        main_obd2_loop_passed = 1;
-//        uint8_t engine = obd2_engine_working();
-//        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000) && sim868_hasNewFile);
-//        powersave = !p;
-//    }
+    if (obd2_loop()) { // change obd code
+        main_obd2_loop_passed = 1;
+        uint8_t engine = obd2_engine_working();
+        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000) && sim868_hasNewFile);
+        powersave = !p;
+    }
 
 #ifdef POWERMODE_OFF
     powersave = 1;
@@ -133,9 +133,12 @@ void loop(void) {
     }
 #endif
 
+//    blink(1);
     if (main_obd2_loop_passed && !powersave && pton(&main_telemetryTon, obd2_engine_working(), 5000)) {
+//        long_blink(1);
         pTimerReset(&main_telemetryTon);
         char buf[SIM868_CHARBUFFER_LENGTH];
+        memset(buf, 0, SIM868_CHARBUFFER_LENGTH);
         sprintf(buf, "{\"ticks\":%lu,\"imei\":\"%s\",\"gps\":\"%s\",\"gps_timestamp\":%lu,\"session\":\"%s\","
                      "\"obd2_timestamp\":%lu,\"run_time\":%lu,\"distance\":%lu,\"engine_rpm\":%u,\"vehicle_kmh\":%u}",
                      _millis, sim868_imei, sim868_cgnurc, sim868_cgnurc_timestamp, sim868_gps_session,
