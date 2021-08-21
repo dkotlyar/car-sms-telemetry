@@ -49,19 +49,25 @@ def telemetry(request, id=None):
 
 def add_telemetry(body):
     telemetry = Telemetry()
-    telemetry.ticks = get_or_default(body, 'ticks', default=0)
+    telemetry.ticks = get_or_default(body, ('ticks', 'mcu_millis'), default=0)
     telemetry.imei = get_or_default(body, 'imei', default='')
     telemetry.obd2_timestamp = get_or_default(body, 'obd2_timestamp', default=0)
-    telemetry.run_time = get_or_default(body, 'run_time', default=0)
+    telemetry.run_time = get_or_default(body, ('run_time', 'runtime'), default=0)
     telemetry.distance = get_or_default(body, 'distance', default=0)
     telemetry.engine_rpm = get_or_default(body, 'engine_rpm', default=0)
     telemetry.vehicle_kmh = get_or_default(body, 'vehicle_kmh', default=0)
     telemetry.gps_timestamp = get_or_default(body, 'gps_timestamp', default=0)
-    telemetry.gps = get_or_default(body, 'gps', default='')
+    telemetry.gps = get_or_default(body, ('gps', 'gnss'), default='')
     telemetry.session = get_or_default(body, 'session', default='')
 
     if telemetry.session != '':
         telemetry.session_datetime = datetime.strptime(f'{telemetry.session}+0000', '%Y%m%d%H%M%S.%f%z')
+    if (session_datetime := get_or_default(body, 'session_datetime', default='')) != '':
+        telemetry.session_datetime = datetime.fromtimestamp(session_datetime, tz=pytz.utc)
+    if (obd2_datetime := get_or_default(body, 'obd2_datetime', default='')) != '':
+        telemetry.obd2_datetime = datetime.fromtimestamp(obd2_datetime, tz=pytz.utc)
+    if (snapshot_datetime := get_or_default(body, 'snapshot_datetime', default='')) != '':
+        telemetry.snapshot_datetime = datetime.fromtimestamp(snapshot_datetime, tz=pytz.utc)
 
     try:
         GNSS_run_status, fix_status, UTC_datetime, latitude, longitude, MLS_Altitude, \
@@ -69,14 +75,16 @@ def add_telemetry(body):
         satellites_used, _, _, cn0_max, HPA, VPA = telemetry.gps.split(',')
 
         gps_datetime = datetime.strptime(f'{UTC_datetime}+0000', '%Y%m%d%H%M%S.%f%z')
-        print(gps_datetime)
 
         if (gps_datetime.year > 1980):
-            telemetry.snapshot_datetime = gps_datetime + timedelta(
-                milliseconds=(telemetry.ticks - telemetry.gps_timestamp))
-            telemetry.obd2_datetime = gps_datetime + timedelta(
-                milliseconds=(telemetry.obd2_timestamp - telemetry.gps_timestamp))
-            # telemetry.session_datetime = gps_datetime + timedelta(milliseconds=-telemetry.gps_timestamp)
+            if telemetry.snapshot_datetime is None:
+                telemetry.snapshot_datetime = gps_datetime + timedelta(
+                    milliseconds=(telemetry.ticks - telemetry.gps_timestamp))
+            if telemetry.obd2_datetime is None:
+                telemetry.obd2_datetime = gps_datetime + timedelta(
+                    milliseconds=(telemetry.obd2_timestamp - telemetry.gps_timestamp))
+            if telemetry.session_datetime is None:
+                telemetry.session_datetime = gps_datetime + timedelta(milliseconds=-telemetry.gps_timestamp)
 
             telemetry.GNSS_run_status = GNSS_run_status == '1'
             telemetry.fix_status = fix_status == '1'
