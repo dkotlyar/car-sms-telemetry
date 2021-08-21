@@ -1,7 +1,10 @@
 import json
 import re
 import time
+from datetime import datetime, timedelta
 
+import psycopg2
+import psycopg2.extras
 import serial
 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
 
@@ -9,7 +12,10 @@ from codesys_utils import PT
 
 
 class SIM868:
-    def __init__(self, port, baudrate=9600, parity=serial.PARITY_NONE, stopbits=1, bytesize=8, timeout=1):
+    def __init__(self, port, baudrate=9600, parity=serial.PARITY_NONE, stopbits=1, bytesize=8, timeout=1, dbcred=None):
+        assert dbcred is not None
+        dbname, username, passwd, host, dbport = dbcred
+        self.dbcon = psycopg2.connect(dbname=dbname, user=username, password=passwd, host=host, port=dbport)
         self.port = serial.Serial(port=port, baudrate=baudrate, parity=parity,
                                   stopbits=stopbits, bytesize=bytesize, timeout=timeout)
         self.cgnsurc = 2
@@ -24,11 +30,11 @@ class SIM868:
         self.lastcommand_timeout = PT()
         self.imei = ''
         self.gnss = ''
-        self.snapshots = []
+        self.snapshots = []  # буфер для отправки снапшотов на сервер
 
-    def put(self, str):
-        write = f"{str}\r\n".encode('utf-8')
-        print(f"$ {str}")
+    def put(self, msg):
+        write = f"{msg}\r\n".encode('utf-8')
+        print(f"$ {msg}")
         self.port.write(write)
         self.lastcommand_timeout.reset()
 
@@ -86,8 +92,8 @@ class SIM868:
 
     def http_loop(self):
         if self.http_state == 'INIT':
+            self.snapshots = self.get_snapshots()
             if len(self.snapshots) > 0:
-                print(f'# snapshots {len(self.snapshots)}')
                 self.http_state = 'SAPBR_INIT'
         elif self.http_state == 'SAPBR_INIT':
             if not self.is_busy():
@@ -112,8 +118,8 @@ class SIM868:
                 if self.status == 'ERROR':
                     self.http_state = 'HTTP_NETWORK_ERROR'
                 else:
-                    snapshot = json.dumps(self.snapshots[0])
-                    self.tx_buffer.append(f'AT+HTTPDATA={len(snapshot)},2000')
+                    snapshots = json.dumps(self.snapshots)
+                    self.tx_buffer.append(f'AT+HTTPDATA={len(snapshots)},2000')
                     self.busy()
                     self.http_state = 'HTTP_DOWNLOAD'
         elif self.http_state == 'HTTP_DOWNLOAD':
@@ -121,8 +127,8 @@ class SIM868:
                 if self.status == 'ERROR':
                     self.http_state = 'HTTP_NETWORK_ERROR'
                 else:
-                    snapshot = json.dumps(self.snapshots[0])
-                    self.tx_buffer.append(snapshot)
+                    snapshots = json.dumps(self.snapshots)
+                    self.tx_buffer.append(snapshots)
                     self.busy()
                     self.http_state = 'HTTP_ACTION'
         elif self.http_state == 'HTTP_ACTION':
@@ -144,7 +150,7 @@ class SIM868:
             self.tx_buffer.append('AT+HTTPTERM')
             self.busy()
             self.http_state = 'INIT'
-            self.snapshots = self.snapshots[1:]
+            self.mark_snapshots(self.snapshots)
         elif self.http_state == 'HTTP_NETWORK_ERROR':
             self.tx_buffer.append('AT+HTTPTERM')
             self.busy()
@@ -188,6 +194,41 @@ class SIM868:
             print(f'Incorrect loop state: {self.loop_state}')
             self.loop_state = 'INIT'
 
+    def get_snapshots(self, limit=3):
+        cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("select * from snapshots where published=false limit %s", (limit, ))
+        res = cursor.fetchall()
+        cursor.close()
+        vl = lambda v: v.timestamp() if type(v) == datetime else v
+        return [{k:vl(v) for k, v in record.items()} for record in res]
+
+    def add_snapshot(self, snapshot):
+        cursor = self.dbcon.cursor()
+        cursor.execute("insert into snapshots (imei, gnss, runtime, distance, vehicle_kmh, engine_rpm, "
+                       "snapshot_datetime, session_datetime, obd2_datetime, mcu_millis, published) "
+                       "values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false) "
+                       "RETURNING id ",
+                       (snapshot['imei'], snapshot['gnss'], snapshot['run_time'], snapshot['distance'],
+                        snapshot['vehicle_kmh'], snapshot['engine_rpm'], datetime.now(),
+                        snapshot['session_datetime'], snapshot['obd2_datetime'], snapshot['mcu_millis']))
+        snapshot_id = cursor.fetchone()[0]
+        self.dbcon.commit()
+        cursor.close()
+        return snapshot_id
+
+    def mark_snapshots(self, snapshots):
+        if len(snapshots) == 0:
+            return
+
+        cursor = self.dbcon.cursor()
+        if len(snapshots) == 1:
+            cursor.execute("update snapshots set published=true where id=%s" % (snapshots[0]['id'],))
+        else:
+            ids = tuple(map(lambda x: x['id'], snapshots))
+            cursor.execute("update snapshots set published=true where id in %s" % (ids, ))
+        self.dbcon.commit()
+        cursor.close()
+
 
 class OBD2:
     def __init__(self, port, stopbits=1, bytesize=8, parity='N', baudrate=9600):
@@ -220,26 +261,34 @@ class OBD2:
 
 
 if __name__ == '__main__':
+    dbname = 'beacon-local'
+    username = 'postgres'
+    passwd = 'qwerty'
+    host = 'localhost'
+    port = 5432
+
+    session_datetime = datetime.now()
     obd2 = OBD2(port='/dev/ttyUSB0', baudrate=57600)
-    sim868 = SIM868(port='/dev/ttyUSB1', baudrate=115200)
+    dbcred = (dbname, username, passwd, host, port)
+    sim868 = SIM868(port='/dev/ttyUSB0', baudrate=115200, dbcred=dbcred)
     gnssTon = PT()
+
     while True:
         time.sleep(0.1)
         obd2.communication()
         sim868.loop()
         if gnssTon.ton_reset(True, 5000):
             snapshot = {
-                'ticks': obd2.millis,
+                'mcu_millis': obd2.millis,
                 'imei': sim868.imei,
-                'gps': sim868.gnss,
-                'gps_timestamp': 0,
-                'session': '',
-                'obd2_timestamp': obd2.obd_timestamp,
+                'gnss': sim868.gnss,
+                'session_datetime': session_datetime,
+                'obd2_datetime': datetime.now() + timedelta(milliseconds=(obd2.obd_timestamp - obd2.millis)),
                 'run_time': obd2.runtime,
                 'distance': obd2.distance,
                 'engine_rpm': obd2.engine_rpm,
                 'vehicle_kmh': obd2.vehicle_kmh
             }
             sim868.gnss = ''
-            print(snapshot)
-            sim868.snapshots.append(snapshot)
+            snapshot_id = sim868.add_snapshot(snapshot)
+            print(snapshot_id, snapshot)
