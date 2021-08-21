@@ -41,6 +41,7 @@ uint8_t obd2_request_sync(uint8_t service_number, uint8_t pid_code);
 
 uint32_t obd2_get_aprox_distance_traveled(void);
 uint32_t obd2_get_runtime_since_engine_start(void);
-#define obd2_engine_working()    (obd2_get_runtime_since_engine_start() > 0)
+//#define obd2_engine_working()    (obd2_get_runtime_since_engine_start() > 0)
+#define obd2_engine_working()    (1)
 
 #endif //OBD_SCAN_OBD2_H

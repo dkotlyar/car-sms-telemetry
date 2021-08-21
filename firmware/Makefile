@@ -69,7 +69,7 @@ $(program_name): $(addprefix release/,$(patsubst %.c,%.o,$(wildcard $(search_wil
 
 VPATH := $(source_dirs)
 
-release/%.o: %.c
+release/%.o: %.c %.h
 	avr-gcc -c -O3 -mmcu=$(mcu) -MD $(addprefix -I,$(source_dirs)) -o $@ $<
 
 flash:
