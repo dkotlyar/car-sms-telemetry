@@ -31,63 +31,75 @@ def telemetry(request, id=None):
     if request.method == 'POST':
         body = json.loads(request.body)
         print(body)
-        telemetry = Telemetry()
-        telemetry.ticks = get_or_default(body, 'ticks', default=0)
-        telemetry.imei = get_or_default(body, 'imei', default='')
-        telemetry.obd2_timestamp = get_or_default(body, 'obd2_timestamp', default=0)
-        telemetry.run_time = get_or_default(body, 'run_time', default=0)
-        telemetry.distance = get_or_default(body, 'distance', default=0)
-        telemetry.engine_rpm = get_or_default(body, 'engine_rpm', default=0)
-        telemetry.vehicle_kmh = get_or_default(body, 'vehicle_kmh', default=0)
-        telemetry.gps_timestamp = get_or_default(body, 'gps_timestamp', default=0)
-        telemetry.gps = get_or_default(body, 'gps', default='')
-        telemetry.session = get_or_default(body, 'session', default='')
-
-        if telemetry.session != '':
-            telemetry.session_datetime = datetime.strptime(f'{telemetry.session}+0000', '%Y%m%d%H%M%S.%f%z')
-
-        try:
-            GNSS_run_status, fix_status, UTC_datetime, latitude, longitude, MLS_Altitude, \
-            speed_over_ground, course_over_ground, fix_mode, _, HDOP, PDOP, VDOP, _, satellites_in_view, \
-            satellites_used, _, _, cn0_max, HPA, VPA = telemetry.gps.split(',')
-
-            gps_datetime = datetime.strptime(f'{UTC_datetime}+0000', '%Y%m%d%H%M%S.%f%z')
-            print(gps_datetime)
-
-            if (gps_datetime.year > 1980):
-                telemetry.snapshot_datetime = gps_datetime + timedelta(milliseconds=(telemetry.ticks - telemetry.gps_timestamp))
-                telemetry.obd2_datetime = gps_datetime + timedelta(milliseconds=(telemetry.obd2_timestamp - telemetry.gps_timestamp))
-                # telemetry.session_datetime = gps_datetime + timedelta(milliseconds=-telemetry.gps_timestamp)
-
-                telemetry.GNSS_run_status = GNSS_run_status == '1'
-                telemetry.fix_status = fix_status == '1'
-                telemetry.gps_datetime = gps_datetime
-                telemetry.latitude = float(latitude) if latitude != '' else None
-                telemetry.longitude = float(longitude) if longitude != '' else None
-                telemetry.MLS_Altitude = float(MLS_Altitude) if MLS_Altitude != '' else None
-                telemetry.speed_over_ground = float(speed_over_ground) if speed_over_ground != '' else None
-                telemetry.course_over_ground = float(course_over_ground) if course_over_ground != '' else None
-                telemetry.fix_mode = int(fix_mode) if fix_mode != '' else None
-                telemetry.HDOP = float(HDOP) if HDOP != '' else None
-                telemetry.PDOP = float(PDOP) if PDOP != '' else None
-                telemetry.VDOP = float(VDOP) if VDOP != '' else None
-                telemetry.satellites_in_view = int(satellites_in_view) if satellites_in_view != '' else None
-                telemetry.satellites_used = int(satellites_used) if satellites_used != '' else None
-                telemetry.cn0_max = int(cn0_max) if cn0_max != '' else None
-                telemetry.HPA = float(HPA) if HPA != '' else None
-                telemetry.VPA = float(VPA) if VPA != '' else None
-        except Exception as e:
-            print(e)
-
-        telemetry.save()
-
-        return JsonResponse({
-            'error_code': 0,
-            'telemetry_id': telemetry.id
-        })
+        if type(body) == list:
+            tids = [add_telemetry(t) for t in body]
+            return JsonResponse({
+                'error_code': 0,
+                'telemetry_ids': tids
+            })
+        else:
+            tid = add_telemetry(body)
+            return JsonResponse({
+                'error_code': 0,
+                'telemetry_id': tid
+            })
 
     return HttpResponse(status=400)
 
+
+def add_telemetry(body):
+    telemetry = Telemetry()
+    telemetry.ticks = get_or_default(body, 'ticks', default=0)
+    telemetry.imei = get_or_default(body, 'imei', default='')
+    telemetry.obd2_timestamp = get_or_default(body, 'obd2_timestamp', default=0)
+    telemetry.run_time = get_or_default(body, 'run_time', default=0)
+    telemetry.distance = get_or_default(body, 'distance', default=0)
+    telemetry.engine_rpm = get_or_default(body, 'engine_rpm', default=0)
+    telemetry.vehicle_kmh = get_or_default(body, 'vehicle_kmh', default=0)
+    telemetry.gps_timestamp = get_or_default(body, 'gps_timestamp', default=0)
+    telemetry.gps = get_or_default(body, 'gps', default='')
+    telemetry.session = get_or_default(body, 'session', default='')
+
+    if telemetry.session != '':
+        telemetry.session_datetime = datetime.strptime(f'{telemetry.session}+0000', '%Y%m%d%H%M%S.%f%z')
+
+    try:
+        GNSS_run_status, fix_status, UTC_datetime, latitude, longitude, MLS_Altitude, \
+        speed_over_ground, course_over_ground, fix_mode, _, HDOP, PDOP, VDOP, _, satellites_in_view, \
+        satellites_used, _, _, cn0_max, HPA, VPA = telemetry.gps.split(',')
+
+        gps_datetime = datetime.strptime(f'{UTC_datetime}+0000', '%Y%m%d%H%M%S.%f%z')
+        print(gps_datetime)
+
+        if (gps_datetime.year > 1980):
+            telemetry.snapshot_datetime = gps_datetime + timedelta(
+                milliseconds=(telemetry.ticks - telemetry.gps_timestamp))
+            telemetry.obd2_datetime = gps_datetime + timedelta(
+                milliseconds=(telemetry.obd2_timestamp - telemetry.gps_timestamp))
+            # telemetry.session_datetime = gps_datetime + timedelta(milliseconds=-telemetry.gps_timestamp)
+
+            telemetry.GNSS_run_status = GNSS_run_status == '1'
+            telemetry.fix_status = fix_status == '1'
+            telemetry.gps_datetime = gps_datetime
+            telemetry.latitude = float(latitude) if latitude != '' else None
+            telemetry.longitude = float(longitude) if longitude != '' else None
+            telemetry.MLS_Altitude = float(MLS_Altitude) if MLS_Altitude != '' else None
+            telemetry.speed_over_ground = float(speed_over_ground) if speed_over_ground != '' else None
+            telemetry.course_over_ground = float(course_over_ground) if course_over_ground != '' else None
+            telemetry.fix_mode = int(fix_mode) if fix_mode != '' else None
+            telemetry.HDOP = float(HDOP) if HDOP != '' else None
+            telemetry.PDOP = float(PDOP) if PDOP != '' else None
+            telemetry.VDOP = float(VDOP) if VDOP != '' else None
+            telemetry.satellites_in_view = int(satellites_in_view) if satellites_in_view != '' else None
+            telemetry.satellites_used = int(satellites_used) if satellites_used != '' else None
+            telemetry.cn0_max = int(cn0_max) if cn0_max != '' else None
+            telemetry.HPA = float(HPA) if HPA != '' else None
+            telemetry.VPA = float(VPA) if VPA != '' else None
+    except Exception as e:
+        print(e)
+
+    telemetry.save()
+    return telemetry.id
 
 @csrf_exempt
 def telemetries(request):
