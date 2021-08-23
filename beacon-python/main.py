@@ -3,6 +3,8 @@ import re
 import time
 from datetime import datetime, timedelta
 
+import cv2
+import imageio
 import psycopg2
 import psycopg2.extras
 import serial
@@ -260,7 +262,7 @@ class OBD2:
             self.obd_timestamp = response[8] | (response[9] << 16)
 
 
-if __name__ == '__main__':
+def main():
     dbname = 'beacon-local'
     username = 'postgres'
     passwd = 'qwerty'
@@ -270,7 +272,7 @@ if __name__ == '__main__':
     session_datetime = datetime.now()
     obd2 = OBD2(port='/dev/ttyUSB0', baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
-    sim868 = SIM868(port='/dev/ttyUSB0', baudrate=115200, dbcred=dbcred)
+    sim868 = SIM868(port='/dev/ttyUSB1', baudrate=115200, dbcred=dbcred)
     gnssTon = PT()
 
     while True:
@@ -292,3 +294,28 @@ if __name__ == '__main__':
             sim868.gnss = ''
             snapshot_id = sim868.add_snapshot(snapshot)
             print(snapshot_id, snapshot)
+
+if __name__ == '__main__':
+    # main()
+
+    vid = cv2.VideoCapture(0)
+    ret, frame = vid.read()
+    height, width = frame.shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(f'images/{datetime.now()}.avi', fourcc, float(10), (width, height))
+    frames = 0
+    while True:
+        ret, frame = vid.read()
+        video.write(frame)
+        if (frames := frames + 1) == 60:
+            break
+        time.sleep(1)
+    video.release()
+
+    # vid = cv2.VideoCapture('images/2021-08-23 22:43:01.469055.avi')
+    # ret, frame = vid.read()
+    # i = 0
+    # while ret:
+    #     cv2.imwrite(f'images/{i}.jpg', frame)
+    #     ret, frame = vid.read()
+    #     i += 1
