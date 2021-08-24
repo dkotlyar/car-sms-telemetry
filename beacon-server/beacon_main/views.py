@@ -155,56 +155,59 @@ def telemetries(request):
 
 @csrf_exempt
 def media_upload(request, imei, timestamp, format, parts, part):
-    if request.method == 'POST':
-        payload = request.body.decode('utf-8')
-        duplicate = MediaPart.objects.filter(imei=imei, timestamp=timestamp, format=format, part=part)
-        media_part = MediaPart()
-        if len(duplicate) == 0:
-            exist_parts = MediaPart.objects.filter(imei=imei, timestamp=timestamp, format=format)
-            if (len(exist_parts) + 1) == parts:
-                payloads = [''] * parts
-                for mp in exist_parts:
-                    with open(mp.payload_filename, 'r') as f:
-                        payloads[mp.part] = f.read()
-                if payloads[part] == '':
-                    payloads[part] = payload
-                    media_filename = f'media/{str(uuid.uuid4())}.{format}'
-                    with open(media_filename, 'wb') as f:
-                        f.write(base64.b64decode(''.join(payloads)))
+    try:
+        if request.method == 'POST':
+            payload = request.body.decode('utf-8')
+            duplicate = MediaPart.objects.filter(imei=imei, timestamp=timestamp, format=format, part=part)
+            media_part = MediaPart()
+            if len(duplicate) == 0:
+                exist_parts = MediaPart.objects.filter(imei=imei, timestamp=timestamp, format=format)
+                if (len(exist_parts) + 1) == parts:
+                    payloads = [''] * parts
                     for mp in exist_parts:
-                        os.remove(mp.payload_filename)
-                    exist_parts.delete()
+                        with open(mp.payload_filename, 'r') as f:
+                            payloads[mp.part] = f.read()
+                    if payloads[part] == '':
+                        payloads[part] = payload
+                        media_filename = f'media/{str(uuid.uuid4())}.{format}'
+                        with open(media_filename, 'wb') as f:
+                            f.write(base64.b64decode(''.join(payloads)))
+                        for mp in exist_parts:
+                            os.remove(mp.payload_filename)
+                        exist_parts.delete()
 
-                    media = Media()
-                    media.imei = imei
-                    media.timestamp = timestamp
-                    media.format = format
-                    media.filepath = media_filename
-                    media.save()
+                        media = Media()
+                        media.imei = imei
+                        media.timestamp = timestamp
+                        media.format = format
+                        media.filepath = media_filename
+                        media.save()
 
-                    return JsonResponse({
-                        'error_code': 0,
-                        'media_id': media.id
-                    })
-        else:
-            media_part = duplicate[0]
+                        return JsonResponse({
+                            'error_code': 0,
+                            'media_id': media.id
+                        })
+            else:
+                media_part = duplicate[0]
 
-        payload_filename = media_part.payload_filename or f'media/parts/{str(uuid.uuid4())}.part'
-        with open(payload_filename, 'w') as f:
-            f.write(payload)
-        media_part.imei = imei
-        media_part.timestamp = timestamp
-        media_part.format = format
-        media_part.parts = parts
-        media_part.part = part
-        media_part.payload_filename = payload_filename
+            payload_filename = media_part.payload_filename or f'media/parts/{str(uuid.uuid4())}.part'
+            with open(payload_filename, 'w') as f:
+                f.write(payload)
+            media_part.imei = imei
+            media_part.timestamp = timestamp
+            media_part.format = format
+            media_part.parts = parts
+            media_part.part = part
+            media_part.payload_filename = payload_filename
 
-        media_part.save()
+            media_part.save()
 
-        return JsonResponse({
-            'error_code': 0,
-            'mediapart_id': media_part.id
-        })
+            return JsonResponse({
+                'error_code': 0,
+                'mediapart_id': media_part.id
+            })
+    except Exception as e:
+        print(e)
 
     return HttpResponse(status=400)
 
