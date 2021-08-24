@@ -6,3 +6,5 @@ syntax: regexp
 .*/\.idea
 .*\.orig
 .*/node_modules/.*
+beacon-python/images/.*
+beacon-server/media/.*

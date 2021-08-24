@@ -1,4 +1,7 @@
+import base64
 import json
+import math
+import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -12,27 +15,56 @@ from pymodbus.client.sync import ModbusSerialClient as ModbusClient
 
 from codesys_utils import PT
 
+MAXIMUM_HTTP_PAYLOAD_SIZE = 30 * (2**10)
+
+
+class SIM868_HttpRequest:
+    def __init__(self):
+        self.url = None
+        self.payload = None
+        self.context = None
+        self.status = 0
+
+    def post(self, url, payload, context):
+        if len(payload) > MAXIMUM_HTTP_PAYLOAD_SIZE:  # maximum SIM868 POST payload size
+            payload = payload[:MAXIMUM_HTTP_PAYLOAD_SIZE]
+        self.url = url
+        self.payload = payload
+        self.context = context
+        self.status = 0
 
 class SIM868:
     def __init__(self, port, baudrate=9600, parity=serial.PARITY_NONE, stopbits=1, bytesize=8, timeout=1, dbcred=None):
         assert dbcred is not None
         dbname, username, passwd, host, dbport = dbcred
         self.dbcon = psycopg2.connect(dbname=dbname, user=username, password=passwd, host=host, port=dbport)
-        self.port = serial.Serial(port=port, baudrate=baudrate, parity=parity,
-                                  stopbits=stopbits, bytesize=bytesize, timeout=timeout)
+
+        try:
+            self.port = serial.Serial(port=port, baudrate=baudrate, parity=parity,
+                                      stopbits=stopbits, bytesize=bytesize, timeout=timeout)
+        except Exception:
+            self.port = None
+
         self.cgnsurc = 2
+
+        self.request = SIM868_HttpRequest()
         self.telemetry_url = 'http://dkotlyar.ru:8000/telemetry'
+        self.media_url = 'http://dkotlyar.ru:8000/media'
 
         self.rx_buffer = ''
         self.tx_buffer = []
         self.loop_state = 'INIT'
+        self._data_send_cycle = 'GET_SNAPSHOTS'
         self.http_state = 'INIT'
+        self.media_state = 'INIT'
         self.http_timeout_ton = PT()
+        self.media_timeout_ton = PT()
         self.status = 'OK'
         self.lastcommand_timeout = PT()
         self.imei = ''
         self.gnss = ''
         self.snapshots = []  # буфер для отправки снапшотов на сервер
+        self.media = None  # буфер для отправки медиа на сервер
 
     def put(self, msg):
         write = f"{msg}\r\n".encode('utf-8')
@@ -69,6 +101,9 @@ class SIM868:
                 self.busy()
 
     def communication(self):
+        if self.port is None:
+            return
+
         rec = self.port.read_all().decode('utf-8')
         rec = self.rx_buffer + rec
         full = re.fullmatch(r'.*[\r\n]$', rec, re.MULTILINE | re.DOTALL)
@@ -94,8 +129,7 @@ class SIM868:
 
     def http_loop(self):
         if self.http_state == 'INIT':
-            self.snapshots = self.get_snapshots()
-            if len(self.snapshots) > 0:
+            if self.request.url is not None:
                 self.http_state = 'SAPBR_INIT'
         elif self.http_state == 'SAPBR_INIT':
             if not self.is_busy():
@@ -112,7 +146,7 @@ class SIM868:
                 if self.status == 'ERROR':
                     self.http_state = 'HTTP_NETWORK_ERROR'
                 else:
-                    self.tx_buffer.append(f'AT+HTTPPARA=URL,{self.telemetry_url}')
+                    self.tx_buffer.append(f'AT+HTTPPARA=URL,{self.request.url}')
                     self.busy()
                     self.http_state = 'HTTP_DATA'
         elif self.http_state == 'HTTP_DATA':
@@ -120,8 +154,7 @@ class SIM868:
                 if self.status == 'ERROR':
                     self.http_state = 'HTTP_NETWORK_ERROR'
                 else:
-                    snapshots = json.dumps(self.snapshots)
-                    self.tx_buffer.append(f'AT+HTTPDATA={len(snapshots)},2000')
+                    self.tx_buffer.append(f'AT+HTTPDATA={len(self.request.payload)},30000')
                     self.busy()
                     self.http_state = 'HTTP_DOWNLOAD'
         elif self.http_state == 'HTTP_DOWNLOAD':
@@ -129,8 +162,7 @@ class SIM868:
                 if self.status == 'ERROR':
                     self.http_state = 'HTTP_NETWORK_ERROR'
                 else:
-                    snapshots = json.dumps(self.snapshots)
-                    self.tx_buffer.append(snapshots)
+                    self.tx_buffer.append(self.request.payload)
                     self.busy()
                     self.http_state = 'HTTP_ACTION'
         elif self.http_state == 'HTTP_ACTION':
@@ -152,14 +184,54 @@ class SIM868:
             self.tx_buffer.append('AT+HTTPTERM')
             self.busy()
             self.http_state = 'INIT'
-            self.mark_snapshots(self.snapshots)
+            self.request.status = 200
+            self.request.url = None
         elif self.http_state == 'HTTP_NETWORK_ERROR':
             self.tx_buffer.append('AT+HTTPTERM')
             self.busy()
             self.http_state = 'INIT'
+            self.request.status = 900
+            self.request.url = None
         else:
             print(f'Unknown http state: {self.http_state}')
             self.http_state = 'INIT'
+
+    def data_send_cycle(self):
+        if self._data_send_cycle == 'SNAPSHOTS':
+            snapshots = self.get_snapshots()
+            if len(snapshots) > 0:
+                self.request.post(self.telemetry_url, json.dumps(snapshots), (snapshots, ))
+                self._data_send_cycle = 'PENDING_SNAPSHOTS'
+            else:
+                self._data_send_cycle = 'MEDIA'
+        elif self._data_send_cycle == 'PENDING_SNAPSHOTS':
+            if self.request.status == 200:
+                snapshots, = self.request.context
+                self.mark_snapshots(snapshots)
+                self._data_send_cycle = 'MEDIA'
+            elif self.request.status > 0:
+                self._data_send_cycle = 'MEDIA'
+
+        elif self._data_send_cycle == 'MEDIA':
+            media = self.get_media()
+            if media is not None:
+                parts = media['parts']
+                part = media['part']
+                ext = os.path.splitext(media['filename'])[1][1:]
+                timestamp = media['timestamp']
+                self.request.post(f'{self.media_url}/{self.imei}/{timestamp}/{ext}/{parts}/{part}', media['payload'], (media, ))
+                self._data_send_cycle = 'PENDING_MEDIA'
+            else:
+                self._data_send_cycle = 'SNAPSHOTS'
+        elif self._data_send_cycle == 'PENDING_MEDIA':
+            if self.request.status == 200:
+                media, = self.request.context
+                self.mark_media(media)
+                self._data_send_cycle = 'SNAPSHOTS'
+            elif self.request.status > 0:
+                self._data_send_cycle = 'SNAPSHOTS'
+        else:
+            self._data_send_cycle = 'SNAPSHOTS'
 
     def loop(self):
         self.communication()
@@ -191,6 +263,7 @@ class SIM868:
                 self.busy()
                 self.loop_state = 'OK'
         elif self.loop_state == 'OK':
+            self.data_send_cycle()
             self.http_loop()
         else:
             print(f'Incorrect loop state: {self.loop_state}')
@@ -231,6 +304,46 @@ class SIM868:
         self.dbcon.commit()
         cursor.close()
 
+    def get_media(self):
+        cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute("select * from media where published<parts limit 1")
+        res = cursor.fetchone()
+        cursor.close()
+        if res is None:
+            return None
+        vl = lambda v: v.timestamp() if type(v) == datetime else v
+        media = {k:vl(v) for k, v in res.items()}
+        with open(media['filename'], 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode('utf-8')
+            i = media['published']
+            b64_cut = b64[MAXIMUM_HTTP_PAYLOAD_SIZE * i: MAXIMUM_HTTP_PAYLOAD_SIZE * (i + 1)]
+            media['part'] = media['published']
+            media['payload'] = b64_cut
+        return media
+
+    def add_media(self, filename, timestamp):
+        parts = 0
+        with open(filename, 'rb') as f:
+            b64 = base64.b64encode(f.read())
+            parts = math.ceil(len(b64) / MAXIMUM_HTTP_PAYLOAD_SIZE)
+
+        cursor = self.dbcon.cursor()
+        cursor.execute("insert into media (filename, timestamp, create_datetime, published, parts) "
+                       "values (%s, %s, %s, 0, %s) "
+                       "RETURNING id ",
+                       (filename, int(timestamp.timestamp() * 1000), datetime.now(), parts))
+        media_id = cursor.fetchone()[0]
+        self.dbcon.commit()
+        cursor.close()
+        return media_id
+
+    def mark_media(self, media):
+        if media is None:
+            return
+        cursor = self.dbcon.cursor()
+        cursor.execute("update media set published=published+1 where id=%s" % (media['id'],))
+        self.dbcon.commit()
+        cursor.close()
 
 class OBD2:
     def __init__(self, port, stopbits=1, bytesize=8, parity='N', baudrate=9600):
@@ -250,6 +363,8 @@ class OBD2:
         self.obd_timestamp = 0
 
     def communication(self):
+        if not self.client.is_socket_open():
+            return
         response = self.client.read_input_registers(address=0x00, count=self.input_registers_count, unit=self.unit)
         if not response.isError():
             response = [response.getRegister(i) for i in range(self.input_registers_count)]
@@ -274,6 +389,17 @@ def main():
     dbcred = (dbname, username, passwd, host, port)
     sim868 = SIM868(port='/dev/ttyUSB1', baudrate=115200, dbcred=dbcred)
     gnssTon = PT()
+    videoTon = PT()
+
+    vid = cv2.VideoCapture(0)
+    ret, frame = vid.read()
+    height, width = frame.shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    timestamp = datetime.now()
+    videoname = f'images/{timestamp}.avi'
+    video = cv2.VideoWriter(videoname, fourcc, float(10), (width, height))
+    video.write(frame)
+    frames = 1
 
     while True:
         time.sleep(0.1)
@@ -295,27 +421,17 @@ def main():
             snapshot_id = sim868.add_snapshot(snapshot)
             print(snapshot_id, snapshot)
 
+        if videoTon.ton_reset(True, 1000):
+            ret, frame = vid.read()
+            video.write(frame)
+            if (frames := frames + 1) == 60:
+                video.release()
+                sim868.add_media(videoname, timestamp)
+                timestamp = datetime.now()
+                videoname = f'images/{timestamp}.avi'
+                video = cv2.VideoWriter(videoname, fourcc, float(10), (width, height))
+                frames = 0
+
+
 if __name__ == '__main__':
-    # main()
-
-    vid = cv2.VideoCapture(0)
-    ret, frame = vid.read()
-    height, width = frame.shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video = cv2.VideoWriter(f'images/{datetime.now()}.avi', fourcc, float(10), (width, height))
-    frames = 0
-    while True:
-        ret, frame = vid.read()
-        video.write(frame)
-        if (frames := frames + 1) == 60:
-            break
-        time.sleep(1)
-    video.release()
-
-    # vid = cv2.VideoCapture('images/2021-08-23 22:43:01.469055.avi')
-    # ret, frame = vid.read()
-    # i = 0
-    # while ret:
-    #     cv2.imwrite(f'images/{i}.jpg', frame)
-    #     ret, frame = vid.read()
-    #     i += 1
+    main()
