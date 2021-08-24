@@ -2,6 +2,7 @@ from django.db import models
 
 # Create your models here.
 
+
 class Telemetry(models.Model):
     create_datetime = models.DateTimeField(auto_now_add=True)
     update_datetime = models.DateTimeField(auto_now=True)
@@ -41,3 +42,23 @@ class Telemetry(models.Model):
 
     def __str__(self):
         return 'Telemetry #%d %s :: %f %f' % (self.id, self.imei, self.latitude or 0, self.longitude or 0)
+
+
+class MediaPart(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
+    imei = models.CharField(max_length=20, blank=True)
+    timestamp = models.BigIntegerField()
+    format = models.CharField(max_length=10, blank=True)
+    payload_filename = models.CharField(max_length=100)
+    part = models.IntegerField()
+    parts = models.IntegerField()
+
+
+class Media(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
+    imei = models.CharField(max_length=20, blank=True)
+    timestamp = models.BigIntegerField()
+    format = models.CharField(max_length=10, blank=True)
+    filepath = models.CharField(max_length=100)
