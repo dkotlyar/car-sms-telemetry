@@ -1,3 +1,6 @@
 from django.contrib import admin
 
-# Register your models here.
+from beacon_local.models import Snapshot, Media
+
+admin.site.register(Snapshot)
+admin.site.register(Media)
