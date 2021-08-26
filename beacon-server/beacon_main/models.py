@@ -1,17 +1,15 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from django.db import models
 
-# Create your models here.
 
-
-class DefaultModel(models.Model):
+class Car(models.Model):
     create_datetime = models.DateTimeField(auto_now_add=True)
     update_datetime = models.DateTimeField(auto_now=True)
-
-
-class Car(DefaultModel):
     imei = models.CharField(max_length=20, blank=True)
+    gos_nomer = models.CharField(max_length=15)
+    brand = models.CharField(max_length=50)
+    model = models.CharField(max_length=50)
 
     @staticmethod
     def get_or_create(imei):
@@ -27,8 +25,13 @@ class Car(DefaultModel):
         car.save()
         return car
 
+    def __str__(self):
+        return ' '.join(filter(None, [self.brand, self.model, self.gos_nomer, self.imei]))
 
-class Session(DefaultModel):
+
+class Session(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
     car = models.ForeignKey(Car, on_delete=models.PROTECT, null=True)
     session_datetime = models.DateTimeField(null=True)
 
@@ -45,9 +48,17 @@ class Session(DefaultModel):
         session = Session()
         session.car = car
         session.session_datetime = dt
+        session.save()
+        return session
+
+    def __str__(self):
+        dt = self.session_datetime.strftime('%d-%m-%Y %H:%M:%S')
+        return f'{str(self.car)} {dt}'
 
 
-class TelemetryRaw(DefaultModel):
+class TelemetryRaw(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
     imei = models.CharField(max_length=20, blank=True)
     ticks = models.IntegerField(default=0)
     obd2_timestamp = models.IntegerField(default=0)
@@ -59,7 +70,9 @@ class TelemetryRaw(DefaultModel):
     gps = models.CharField(max_length=200)
 
 
-class Telemetry(DefaultModel):
+class Telemetry(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
     session = models.ForeignKey(Session, on_delete=models.PROTECT)
     snapshot_datetime = models.DateTimeField(null=True)
     obd2_datetime = models.DateTimeField(null=True)
@@ -89,10 +102,12 @@ class Telemetry(DefaultModel):
         ordering = ['-gps_datetime']
 
     def __str__(self):
-        return 'Telemetry #%d %s :: %f %f' % (self.id, self.imei, self.latitude or 0, self.longitude or 0)
+        return 'Telemetry %s #%d' % (str(self.session), self.id)
 
 
-class MediaPart(DefaultModel):
+class MediaPart(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
     car = models.ForeignKey(Car, on_delete=models.PROTECT, null=True)
     timestamp = models.BigIntegerField()
     format = models.CharField(max_length=10, blank=True)
@@ -101,7 +116,9 @@ class MediaPart(DefaultModel):
     parts = models.IntegerField()
 
 
-class Media(DefaultModel):
+class Media(models.Model):
+    create_datetime = models.DateTimeField(auto_now_add=True)
+    update_datetime = models.DateTimeField(auto_now=True)
     car = models.ForeignKey(Car, on_delete=models.PROTECT, null=True)
     timestamp = models.BigIntegerField()
     format = models.CharField(max_length=10, blank=True)
