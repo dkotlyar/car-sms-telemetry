@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytz
 from django.db.models import F
@@ -46,7 +46,9 @@ def set_snapshots_statuses(request):
         for snapshot in body:
             snapshot_datetime = datetime.fromtimestamp(snapshot['snapshot_datetime'] / 1000, pytz.utc)
             Snapshot.objects\
-                .filter(imei=snapshot['imei'], snapshot_datetime=snapshot_datetime)\
+                .filter(imei__exact=snapshot['imei'],
+                        snapshot_datetime__gte=snapshot_datetime - timedelta(milliseconds=10),
+                        snapshot_datetime__lte=snapshot_datetime + timedelta(milliseconds=10))\
                 .update(published=snapshot['published'])
 
         return default_json_response({})
