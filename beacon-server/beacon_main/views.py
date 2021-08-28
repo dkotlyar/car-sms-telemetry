@@ -33,7 +33,9 @@ def post_test(request):
 def telemetry(request, id=None):
     if request.method == 'POST':
         body = json.loads(request.body)
-        print(body)
+        if 'snapshots' in body:
+            body = body['snapshots']
+
         if type(body) == list:
             tids = [add_telemetry(t) for t in body]
             return JsonResponse({
@@ -71,11 +73,11 @@ def add_telemetry(body):
     telemetry_parsed = Telemetry()
     car = Car.get_or_create(telemetry_raw.imei)
     if (session_datetime := get_or_default(body, 'session_datetime', default='')) != '':
-        telemetry_parsed.session = Session.get_or_create(car=car, dt=datetime.fromtimestamp(session_datetime, tz=pytz.utc))
+        telemetry_parsed.session = Session.get_or_create(car=car, dt=datetime.fromtimestamp(session_datetime / 1000, tz=pytz.utc))
     if (obd2_datetime := get_or_default(body, 'obd2_datetime', default='')) != '':
-        telemetry_parsed.obd2_datetime = datetime.fromtimestamp(obd2_datetime, tz=pytz.utc)
+        telemetry_parsed.obd2_datetime = datetime.fromtimestamp(obd2_datetime / 1000, tz=pytz.utc)
     if (snapshot_datetime := get_or_default(body, 'snapshot_datetime', default='')) != '':
-        telemetry_parsed.snapshot_datetime = datetime.fromtimestamp(snapshot_datetime, tz=pytz.utc)
+        telemetry_parsed.snapshot_datetime = datetime.fromtimestamp(snapshot_datetime / 1000, tz=pytz.utc)
 
     duplicates = Telemetry.objects.filter(session=telemetry_parsed.session, snapshot_datetime=telemetry_parsed.snapshot_datetime)
     if len(duplicates) > 0:
