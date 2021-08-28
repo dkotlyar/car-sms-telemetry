@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F
 
 
 class Snapshot(models.Model):
@@ -14,6 +15,10 @@ class Snapshot(models.Model):
     mcu_millis = models.IntegerField(default=0)
     published = models.BooleanField(default=False)
 
+    @staticmethod
+    def unpublished():
+        return Snapshot.objects.filter(published=False)
+
 
 class Media(models.Model):
     filename = models.CharField(max_length=100)
@@ -21,3 +26,7 @@ class Media(models.Model):
     published = models.IntegerField(default=0)
     parts = models.IntegerField(default=0)
     timestamp = models.DateTimeField(null=True)
+
+    @staticmethod
+    def unpublished():
+        return Media.objects.filter(published__lt=F('parts'))

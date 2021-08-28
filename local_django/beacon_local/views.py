@@ -1,6 +1,8 @@
 import json
 import os
+from datetime import datetime
 
+import pytz
 from django.db.models import F
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -20,6 +22,15 @@ def post_test(request):
     return default_json_response()
 
 
+def check_new_records(request):
+    snapshots = Snapshot.unpublished()
+    media = Media.unpublished()
+    return default_json_response({
+        'snapshots': len(snapshots),
+        'media': len(media)
+    })
+
+
 def get_unpublished_snapshots(request):
     snapshots = Snapshot.objects.filter(published=False)
     return default_json_pagination(request, snapshots)
@@ -29,26 +40,22 @@ def get_unpublished_snapshots(request):
 def set_snapshots_statuses(request):
     if request.method == 'POST':
         body = json.loads(request.body)
-        if not ('ids' in body):
-            return default_json_error('Field `ids` not in request')
-        if not ('published' in body):
-            return default_json_error('Field `published` not in request')
+        if 'snapshots' in body:
+            body = body['snapshots']
 
-        snapshots = Snapshot.objects.filter(id__in=list(map(int, body['ids'])))
-        published = object_to_bool(body['published'])
-        ids = [s.id for s in snapshots]
-        snapshots.update(published=published)
+        for snapshot in body:
+            snapshot_datetime = datetime.fromtimestamp(snapshot['snapshot_datetime'] / 1000, pytz.utc)
+            Snapshot.objects\
+                .filter(imei=snapshot['imei'], snapshot_datetime=snapshot_datetime)\
+                .update(published=snapshot['published'])
 
-        return default_json_response({
-            'ids': ids,
-            'published': published
-        })
+        return default_json_response({})
 
     return HttpResponse(status=400)
 
 
 def get_unpublished_media(request):
-    medias = Media.objects.filter(published__lt=F('parts'))
+    medias = Media.unpublished()
     return default_json_pagination(request, medias)
 
 
