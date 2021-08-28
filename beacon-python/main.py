@@ -10,6 +10,7 @@ import cv2
 import imageio
 import psycopg2
 import psycopg2.extras
+import pytz
 import serial
 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
 
@@ -38,6 +39,8 @@ class SIM868:
         assert dbcred is not None
         dbname, username, passwd, host, dbport = dbcred
         self.dbcon = psycopg2.connect(dbname=dbname, user=username, password=passwd, host=host, port=dbport)
+        self.db_snapshots = 'beacon_local_snapshot'
+        self.db_media = 'beacon_local_media'
 
         try:
             self.port = serial.Serial(port=port, baudrate=baudrate, parity=parity,
@@ -271,7 +274,7 @@ class SIM868:
 
     def get_snapshots(self, limit=3):
         cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute("select * from snapshots where published=false limit %s", (limit, ))
+        cursor.execute(f"select * from {self.db_snapshots} where published=false limit %s", (limit, ))
         res = cursor.fetchall()
         cursor.close()
         vl = lambda v: v.timestamp() if type(v) == datetime else v
@@ -279,12 +282,12 @@ class SIM868:
 
     def add_snapshot(self, snapshot):
         cursor = self.dbcon.cursor()
-        cursor.execute("insert into snapshots (imei, gnss, runtime, distance, vehicle_kmh, engine_rpm, "
+        cursor.execute(f"insert into {self.db_snapshots} (imei, gnss, runtime, distance, vehicle_kmh, engine_rpm, "
                        "snapshot_datetime, session_datetime, obd2_datetime, mcu_millis, published) "
                        "values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false) "
                        "RETURNING id ",
                        (snapshot['imei'], snapshot['gnss'], snapshot['run_time'], snapshot['distance'],
-                        snapshot['vehicle_kmh'], snapshot['engine_rpm'], datetime.now(),
+                        snapshot['vehicle_kmh'], snapshot['engine_rpm'], datetime.now(tz=pytz.utc),
                         snapshot['session_datetime'], snapshot['obd2_datetime'], snapshot['mcu_millis']))
         snapshot_id = cursor.fetchone()[0]
         self.dbcon.commit()
@@ -297,16 +300,16 @@ class SIM868:
 
         cursor = self.dbcon.cursor()
         if len(snapshots) == 1:
-            cursor.execute("update snapshots set published=true where id=%s" % (snapshots[0]['id'],))
+            cursor.execute(f"update {self.db_snapshots} set published=true where id=%s" % (snapshots[0]['id'],))
         else:
             ids = tuple(map(lambda x: x['id'], snapshots))
-            cursor.execute("update snapshots set published=true where id in %s" % (ids, ))
+            cursor.execute(f"update {self.db_snapshots} set published=true where id in %s" % (ids, ))
         self.dbcon.commit()
         cursor.close()
 
     def get_media(self):
         cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute("select * from media where published<parts limit 1")
+        cursor.execute(f"select * from {self.db_media} where published<parts limit 1")
         res = cursor.fetchone()
         cursor.close()
         if res is None:
@@ -328,10 +331,10 @@ class SIM868:
             parts = math.ceil(len(b64) / MAXIMUM_HTTP_PAYLOAD_SIZE)
 
         cursor = self.dbcon.cursor()
-        cursor.execute("insert into media (filename, timestamp, create_datetime, published, parts) "
+        cursor.execute(f"insert into {self.db_media} (filename, timestamp, create_datetime, published, parts) "
                        "values (%s, %s, %s, 0, %s) "
                        "RETURNING id ",
-                       (filename, int(timestamp.timestamp() * 1000), datetime.now(), parts))
+                       (filename, timestamp, datetime.now(tz=pytz.utc), parts))
         media_id = cursor.fetchone()[0]
         self.dbcon.commit()
         cursor.close()
@@ -341,9 +344,10 @@ class SIM868:
         if media is None:
             return
         cursor = self.dbcon.cursor()
-        cursor.execute("update media set published=published+1 where id=%s" % (media['id'],))
+        cursor.execute(f"update {self.db_media} set published=published+1 where id=%s" % (media['id'],))
         self.dbcon.commit()
         cursor.close()
+
 
 class OBD2:
     def __init__(self, port, stopbits=1, bytesize=8, parity='N', baudrate=9600):
@@ -384,22 +388,20 @@ def main():
     host = 'localhost'
     port = 5432
 
-    session_datetime = datetime.now()
+    session_datetime = datetime.now(tz=pytz.utc)
     obd2 = OBD2(port='/dev/ttyUSB0', baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
     sim868 = SIM868(port='/dev/ttyUSB1', baudrate=115200, dbcred=dbcred)
     gnssTon = PT()
     videoTon = PT()
 
-    vid = cv2.VideoCapture(0)
-    ret, frame = vid.read()
-    height, width = frame.shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    timestamp = datetime.now()
-    videoname = f'images/{timestamp}.avi'
-    video = cv2.VideoWriter(videoname, fourcc, float(10), (width, height))
-    video.write(frame)
-    frames = 1
+    vid = cv2.VideoCapture(0)
+    vid_width, vid_height = None, None
+    video = None
+    frames = 0
+    videoname = None
+    timestamp = None
 
     while True:
         time.sleep(0.1)
@@ -411,7 +413,7 @@ def main():
                 'imei': sim868.imei,
                 'gnss': sim868.gnss,
                 'session_datetime': session_datetime,
-                'obd2_datetime': datetime.now() + timedelta(milliseconds=(obd2.obd_timestamp - obd2.millis)),
+                'obd2_datetime': datetime.now(tz=pytz.utc) + timedelta(milliseconds=(obd2.obd_timestamp - obd2.millis)),
                 'run_time': obd2.runtime,
                 'distance': obd2.distance,
                 'engine_rpm': obd2.engine_rpm,
@@ -421,16 +423,30 @@ def main():
             snapshot_id = sim868.add_snapshot(snapshot)
             print(snapshot_id, snapshot)
 
-        if videoTon.ton_reset(True, 1000):
+        if video is None and vid.isOpened():
+            ret, frame = vid.read()
+            vid_height, vid_width = frame.shape[:2]
+            timestamp = datetime.now(tz=pytz.utc)
+            videoname = f'media/{timestamp}.avi'
+            video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
+            video.write(frame)
+            frames += 1
+
+        if vid.isOpened() and videoTon.ton_reset(True, 1000):
             ret, frame = vid.read()
             video.write(frame)
             if (frames := frames + 1) == 60:
                 video.release()
                 sim868.add_media(videoname, timestamp)
-                timestamp = datetime.now()
-                videoname = f'images/{timestamp}.avi'
-                video = cv2.VideoWriter(videoname, fourcc, float(10), (width, height))
+                timestamp = datetime.now(tz=pytz.utc)
+                videoname = f'media/{timestamp}.avi'
+                video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
                 frames = 0
+
+        if not vid.isOpened():
+            if video is not None and video.isOpened():
+                video.release()
+                sim868.add_media(videoname, timestamp)
 
 
 if __name__ == '__main__':
