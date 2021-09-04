@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 
 import cv2
+# import imageio
 import psycopg2
 import psycopg2.extras
 import pytz
@@ -16,6 +17,12 @@ from pymodbus.client.sync import ModbusSerialClient as ModbusClient
 from codesys_utils import PT
 
 MAXIMUM_HTTP_PAYLOAD_SIZE = 30 * (2**10)
+
+dbname = 'beacon-local'
+username = 'postgres'
+passwd = 'qwErty'
+host = 'postgres'
+port = 5432
 
 
 class SIM868_HttpRequest:
@@ -220,7 +227,7 @@ class SIM868:
                 parts = media['parts']
                 part = media['part']
                 ext = os.path.splitext(media['filename'])[1][1:]
-                timestamp = media['timestamp']
+                timestamp = int(media['timestamp'])
                 self.request.post(f'{self.media_url}/{self.imei}/{timestamp}/{ext}/{parts}/{part}', media['payload'], (media, ))
                 self._data_send_cycle = 'PENDING_MEDIA'
             else:
@@ -276,7 +283,7 @@ class SIM868:
         cursor.execute(f"select * from {self.db_snapshots} where published=false limit %s", (limit, ))
         res = cursor.fetchall()
         cursor.close()
-        vl = lambda v: v.timestamp() if type(v) == datetime else v
+        vl = lambda v: int(v.timestamp()*1000) if type(v) == datetime else v
         return [{k:vl(v) for k, v in record.items()} for record in res]
 
     def add_snapshot(self, snapshot):
@@ -381,16 +388,10 @@ class OBD2:
 
 
 def main():
-    dbname = 'beacon-local'
-    username = 'postgres'
-    passwd = 'qwerty'
-    host = 'localhost'
-    port = 5432
-
     session_datetime = datetime.now(tz=pytz.utc)
-    obd2 = OBD2(port='/dev/ttyUSB0', baudrate=57600)
+    obd2 = OBD2(port='/dev/ttyOBD2', baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
-    sim868 = SIM868(port='/dev/ttyUSB1', baudrate=115200, dbcred=dbcred)
+    sim868 = SIM868(port='/dev/ttySIM868', baudrate=57600, dbcred=dbcred)
     gnssTon = PT()
     videoTon = PT()
 
@@ -434,7 +435,8 @@ def main():
         if vid.isOpened() and videoTon.ton_reset(True, 1000):
             ret, frame = vid.read()
             video.write(frame)
-            if (frames := frames + 1) == 60:
+            frames += 1
+            if frames == 60:
                 video.release()
                 sim868.add_media(videoname, timestamp)
                 timestamp = datetime.now(tz=pytz.utc)
