@@ -41,7 +41,8 @@ void init(void) {
     SETBIT_1(LED_DDR, LED_Pn);
     SETBIT_0(BTN_DDR, BTN_Pn);
     SETBIT_1(SIM868_PWR_DDR, SIM868_PWR_Pn);
-    sim868_pwr_off();
+//    sim868_pwr_off();
+    sim868_pwr_on();
     LED_OFF();
 
     millis_init();
