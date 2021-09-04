@@ -7,7 +7,6 @@ import time
 from datetime import datetime, timedelta
 
 import cv2
-import imageio
 import psycopg2
 import psycopg2.extras
 import pytz
