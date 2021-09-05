@@ -98,10 +98,10 @@ class SIM868:
             type, code, len = list(map(int, msg[13:].split(',')))
             type_str = ['GET', 'POST'][type]
             print(f'{type_str} HTTP{code}')
-            if code >= 600:
-                self.http_state = 'HTTP_NETWORK_ERROR'
+            if code == 200:
+                self.http_state = 'HTTP_OK'
             else:
-                self.http_state = 'HTTP_OK'  # любая ошибка от сервера считает ОК
+                self.http_state = 'HTTP_NETWORK_ERROR'
         elif msg == 'DOWNLOAD':
             self.status = 'OK'
         else:
@@ -207,7 +207,7 @@ class SIM868:
 
     def data_send_cycle(self):
         if self._data_send_cycle == 'SNAPSHOTS':
-            snapshots = self.get_snapshots()
+            snapshots = self.get_snapshots(20)
             if len(snapshots) > 0:
                 self.request.post(self.telemetry_url, json.dumps(snapshots), (snapshots, ))
                 self._data_send_cycle = 'PENDING_SNAPSHOTS'
@@ -328,6 +328,13 @@ class SIM868:
             b64_cut = b64[MAXIMUM_HTTP_PAYLOAD_SIZE * i: MAXIMUM_HTTP_PAYLOAD_SIZE * (i + 1)]
             media['part'] = media['published']
             media['payload'] = b64_cut
+            if len(b64_cut) == 0:
+                new_parts = math.ceil(len(b64) / MAXIMUM_HTTP_PAYLOAD_SIZE)
+                media_id = media['id']
+                cursor = self.dbcon.cursor()
+                cursor.execute(f"update {self.db_media} set published={new_parts}, parts={new_parts} where id={media_id}")
+                cursor.close()
+                return self.get_media()
         return media
 
     def add_media(self, filename, timestamp):
@@ -407,7 +414,7 @@ def main():
         time.sleep(0.1)
         obd2.communication()
         sim868.loop()
-        if gnssTon.ton_reset(True, 5000):
+        if gnssTon.ton_reset(True, int(os.getenv('SNAPSHOT_TIME', 5000))):
             snapshot = {
                 'mcu_millis': obd2.millis,
                 'imei': sim868.imei,
@@ -427,7 +434,7 @@ def main():
             ret, frame = vid.read()
             vid_height, vid_width = frame.shape[:2]
             timestamp = datetime.now(tz=pytz.utc)
-            videoname = f'media/{timestamp}.avi'
+            videoname = f'media/{timestamp.timestamp()}.avi'
             video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
             video.write(frame)
             frames += 1
@@ -440,7 +447,7 @@ def main():
                 video.release()
                 sim868.add_media(videoname, timestamp)
                 timestamp = datetime.now(tz=pytz.utc)
-                videoname = f'media/{timestamp}.avi'
+                videoname = f'media/{timestamp.timestamp()}.avi'
                 video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
                 frames = 0
 
