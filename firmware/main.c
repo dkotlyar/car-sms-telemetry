@@ -9,8 +9,10 @@
 #include "modbus.h"
 
 uint8_t powersave;
+uint8_t nanopi_worked;
 ptimer_t main_powerTon;
 ptimer_t main_powersaveTof_long;
+ptimer_t sleepTon;
 
 extern uint32_t _millis;
 uint16_t timer2 = 0;
@@ -32,22 +34,24 @@ ISR(TIMER2_COMP_vect) {
 void main_reset(void) {
     _millis = 0;
     obd2_reset();
+    modbus_clear_reg();
     powersave = 1;
+    nanopi_worked = 0;
     pTimerReset(&main_powerTon);
     pTimerReset(&main_powersaveTof_long);
+    pTimerReset(&sleepTon);
 }
 
 void init(void) {
     SETBIT_1(LED_DDR, LED_Pn);
     SETBIT_0(BTN_DDR, BTN_Pn);
     SETBIT_1(SIM868_PWR_DDR, SIM868_PWR_Pn);
-//    sim868_pwr_off();
-    sim868_pwr_on();
+    sim868_pwr_off();
+//    sim868_pwr_on();
     LED_OFF();
 
     millis_init();
     obd2_init();
-    modbus_init();
 
     sleepmode = WORK;
 
@@ -57,33 +61,41 @@ void init(void) {
 void loop(void) {
     modbus_loop();
 
-    if (obd2_loop()) { // change obd code
-        uint8_t engine = obd2_engine_working();
-        uint8_t p = engine || (ptof(&main_powersaveTof_long, pton(&main_powerTon, engine, 30000), 600000));
-        powersave = !p;
+    uint16_t sleep_delay = modbus_get16(0);
+    if (pton(&sleepTon, sleep_delay > 0, sleep_delay * 1000)) {
+        nanopi_worked = 0;
+        sleepmode = GOTOSLEEP;
     }
 
-    uint32_t _millis = millis();
-    uint32_t runtime = obd2_get_runtime_since_engine_start();
-    uint32_t distance = obd2_get_aprox_distance_traveled();
-    int8_t temperature = obd2_engine_coolant_temperature;
-    uint8_t vehicle_kmh = obd2_vehicle_speed;
-    uint16_t engine_rpm = obd2_engine_speed;
-    uint32_t timestamp = obd2_timestamp;
+    if (obd2_loop()) { // change obd code
+        uint8_t engine = obd2_engine_working();
+        powersave = !engine;
+        if (powersave && !nanopi_worked) {
+            sleepmode = GOTOSLEEP;
+        }
+    }
 
-    modbus_put32(0, 1, _millis);
-    modbus_put32(2, 3, runtime);
-    modbus_put32(4, 5, distance);
-    modbus_put16(6, engine_rpm);
-    modbus_put8(7, (uint8_t)temperature, vehicle_kmh);
-    modbus_put32(8, 9, timestamp);
+    if (read_key()) {
+        powersave = 0;
+    }
 
-#ifdef POWERMODE_OFF
-    powersave = 1;
-#endif
-#ifdef POWERMODE_ON
-    powersave = 0;
-#endif
+    if (!powersave) {
+        sim868_pwr_on();
+        modbus_start();
+        nanopi_worked = 1;
+    }
+
+    uint16_t status = 0;
+    SETBIT(status, 0, powersave);
+
+    modbus_put32(0, 1, millis());
+    modbus_put32(2, 3, obd2_get_runtime_since_engine_start());
+    modbus_put32(4, 5, obd2_get_aprox_distance_traveled());
+    modbus_put16(6, obd2_engine_speed);
+    modbus_put8(7, (uint8_t)obd2_engine_coolant_temperature, obd2_vehicle_speed);
+    modbus_put32(8, 9, obd2_timestamp);
+    modbus_put16(10, status);
+
 }
 
 int main(void) {
@@ -119,6 +131,7 @@ int main(void) {
 	            timer2 = 0;
 	            wdt_disable();
 	            sim868_pwr_off();
+	            modbus_stop();
 	            sleepmode = SLEEP;
 	            break;
 	        case SLEEP:

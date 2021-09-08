@@ -41,9 +41,14 @@ void modbus_start(void) {
 	yaMBSiavr_modbusInit(&modbus_tr, MODBUS_USART_BAUD);
 }
 
-void clear_reg(void) {
+void modbus_clear_reg(void) {
 	for (uint8_t i = 0; i < REG_COUNT_HOLDING; i++) holdingRegisters[i] = 0;
 	for (uint8_t i = 0; i < REG_COUNT_INPUT; i++) inputRegisters[i] = 0;
+}
+
+void modbus_stop(void) {
+	*modbus_tr.usartControl = 0;
+	PORTD &= ~((1<<2)|(1<<3));
 }
 
 uint32_t modbus_getReciveTime(void) {
@@ -52,7 +57,7 @@ uint32_t modbus_getReciveTime(void) {
 
 void modbus_init(void) {
     modbus_start();
-	clear_reg();
+    modbus_clear_reg();
 }
 
 ISR (USART1_TX_vect) {
