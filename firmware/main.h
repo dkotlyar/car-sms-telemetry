@@ -52,7 +52,7 @@ typedef enum {
 #define sim868_pwr_on() {SETBIT_0(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 #define sim868_pwr_off(){SETBIT_1(SIM868_PWR_PORT, SIM868_PWR_Pn);}
 
-#define modbus_get16(i, reg) {(reg) = holdingRegisters[i];}
+#define modbus_get16(i) (holdingRegisters[i])
 #define modbus_put8(i, valueH, valueL) {inputRegisters[i] = ((valueH)<<8) | (valueL);}
 #define modbus_put16(i, value) {inputRegisters[i] = (value);}
 #define modbus_put32(i, j, value) { \

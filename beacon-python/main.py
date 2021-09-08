@@ -108,6 +108,11 @@ class SIM868:
                 self.imei = msg
                 self.busy()
 
+    def powerdown(self):
+        if self.port is None:
+            return
+        self.put('AT+CPOWD=1')
+
     def communication(self):
         if self.port is None:
             return
@@ -277,6 +282,13 @@ class SIM868:
             print(f'Incorrect loop state: {self.loop_state}')
             self.loop_state = 'INIT'
 
+    def get_unpublished_snapshots(self):
+        cursor = self.dbcon.cursor()
+        cursor.execute(f"select count(*) from {self.db_snapshots} where published=false")
+        res = cursor.fetchone()
+        cursor.close()
+        return int(res[0])
+
     def get_snapshots(self, limit=3):
         cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
         cursor.execute(f"select * from {self.db_snapshots} where published=false limit %s", (limit, ))
@@ -404,6 +416,7 @@ class OBD2:
         self.holding_registers_count = 1
         self.unit = 1
 
+        # Input
         self.millis = 0
         self.runtime = 0
         self.distance = 0
@@ -412,9 +425,13 @@ class OBD2:
         self.engine_rpm = 0
         self.obd_timestamp = 0
 
+        # Holding
+        self.sleep_delay = 0
+
     def communication(self):
         if not self.client.is_socket_open():
             return
+        self.client.write_registers(address=0x00, values=[self.sleep_delay], unit=1)
         response = self.client.read_input_registers(address=0x00, count=self.input_registers_count, unit=self.unit)
         if not response.isError():
             response = [response.getRegister(i) for i in range(self.input_registers_count)]
@@ -444,15 +461,31 @@ def main():
     vid_width, vid_height = None, None
     video = None
     frames = 0
-    videoname = None
-    timestamp = None
+    video_name = None
+    video_timestamp = None
 
     datetime_correct = False
+
+    powersave = PT()
+    powersave.tof(True, 0)
 
     while True:
         time.sleep(0.1)
         obd2.communication()
         sim868.loop()
+
+        sleep_tof = int(os.getenv('SLEEP_TOF', 600000))
+        if sleep_tof > 0 and not powersave.tof(obd2.runtime > 0, sleep_tof):
+            sim868.powerdown()
+            obd2.sleep_delay = 3
+            obd2.communication()
+            if video is not None and video.isOpened():
+                video.release()
+                sim868.add_media(video_name, video_timestamp)
+            # os.system('shutdown -h now')
+            # break
+            while True:
+                pass
 
         if not datetime_correct:
             try:
@@ -462,10 +495,11 @@ def main():
                     if UTC_datetime.year > 1980:
                         datetime_correct = True
                         os.system('date -s "%s"' % UTC_datetime)
+                        powersave.tof(True, 0)
             except Exception:
                 pass
 
-        if gnssTon.ton_reset(True, int(os.getenv('SNAPSHOT_TIME', 5000))):
+        if gnssTon.ton_reset(obd2.runtime > 0, int(os.getenv('SNAPSHOT_TIME', 5000))):
             snapshot = {
                 'mcu_millis': obd2.millis,
                 'imei': sim868.imei,
@@ -488,9 +522,9 @@ def main():
         if video is None and vid.isOpened():
             ret, frame = vid.read()
             vid_height, vid_width = frame.shape[:2]
-            timestamp = datetime.now(tz=pytz.utc)
-            videoname = f'media/{timestamp.timestamp()}.avi'
-            video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
+            video_timestamp = datetime.now(tz=pytz.utc)
+            video_name = f'media/{video_timestamp.timestamp()}.avi'
+            video = cv2.VideoWriter(video_name, fourcc, float(10), (vid_width, vid_height))
             video.write(frame)
             frames += 1
 
@@ -500,16 +534,16 @@ def main():
             frames += 1
             if frames == 60:
                 video.release()
-                sim868.add_media(videoname, timestamp)
-                timestamp = datetime.now(tz=pytz.utc)
-                videoname = f'media/{timestamp.timestamp()}.avi'
-                video = cv2.VideoWriter(videoname, fourcc, float(10), (vid_width, vid_height))
+                sim868.add_media(video_name, video_timestamp)
+                video_timestamp = datetime.now(tz=pytz.utc)
+                video_name = f'media/{video_timestamp.timestamp()}.avi'
+                video = cv2.VideoWriter(video_name, fourcc, float(10), (vid_width, vid_height))
                 frames = 0
 
         if not vid.isOpened():
             if video is not None and video.isOpened():
                 video.release()
-                sim868.add_media(videoname, timestamp)
+                sim868.add_media(video_name, video_timestamp)
 
 
 if __name__ == '__main__':
