@@ -18,11 +18,11 @@ from codesys_utils import PT
 
 MAXIMUM_HTTP_PAYLOAD_SIZE = 30 * (2**10)
 
-dbname = 'beacon-local'
-username = 'postgres'
-passwd = 'qwErty'
-host = 'postgres'
-port = 5432
+dbname = os.getenv('DB_NAME', 'beacon-local')
+username = os.getenv('DB_USER', 'postgres')
+passwd = os.getenv('DB_PASSWD', 'qwerty')
+host = os.getenv('DB_HOST', 'localhost')
+port = int(os.getenv('DB_PORT', 5432))
 
 
 class SIM868_HttpRequest:
@@ -306,16 +306,24 @@ class SIM868:
 
         cursor = self.dbcon.cursor()
         if len(snapshots) == 1:
-            cursor.execute(f"update {self.db_snapshots} set published=true where id=%s" % (snapshots[0]['id'],))
+            cursor.execute(f"update {self.db_snapshots} set published=true where id=%s", (snapshots[0]['id'],))
         else:
             ids = tuple(map(lambda x: x['id'], snapshots))
-            cursor.execute(f"update {self.db_snapshots} set published=true where id in %s" % (ids, ))
+            cursor.execute(f"update {self.db_snapshots} set published=true where id in %s", (ids, ))
+        self.dbcon.commit()
+        cursor.close()
+
+    def clear_snapshots(self):
+        cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute(f"delete from {self.db_snapshots} where (published=true and snapshot_datetime<%s) or "
+                       f"(snapshot_datetime<%s)",
+                       (datetime.now() - timedelta(days=3), datetime.now() - timedelta(days=7)))
         self.dbcon.commit()
         cursor.close()
 
     def get_media(self):
         cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute(f"select * from {self.db_media} where published<parts limit 1")
+        cursor.execute(f"select * from {self.db_media} where published<parts order by published desc limit 1")
         res = cursor.fetchone()
         cursor.close()
         if res is None:
@@ -330,9 +338,9 @@ class SIM868:
             media['payload'] = b64_cut
             if len(b64_cut) == 0:
                 new_parts = math.ceil(len(b64) / MAXIMUM_HTTP_PAYLOAD_SIZE)
-                media_id = media['id']
                 cursor = self.dbcon.cursor()
-                cursor.execute(f"update {self.db_media} set published={new_parts}, parts={new_parts} where id={media_id}")
+                cursor.execute(f"update {self.db_media} set published=%s, parts=%s where id=%s",
+                               (new_parts, new_parts, media['id']))
                 cursor.close()
                 return self.get_media()
         return media
@@ -357,9 +365,35 @@ class SIM868:
         if media is None:
             return
         cursor = self.dbcon.cursor()
-        cursor.execute(f"update {self.db_media} set published=published+1 where id=%s" % (media['id'],))
+        cursor.execute(f"update {self.db_media} set published=published+1 where id=%s", (media['id'],))
         self.dbcon.commit()
         cursor.close()
+
+    def clear_media(self):
+        cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cursor.execute(f"select * from {self.db_media} where (published=parts and create_datetime<%s) or "
+                       f"(create_datetime<%s)",
+                       (datetime.now() - timedelta(days=3), datetime.now() - timedelta(days=7)))
+        res = cursor.fetchall()
+        cursor.close()
+        if res is None:
+            return
+        vl = lambda v: v.timestamp() if type(v) == datetime else v
+        media = [{k:vl(v) for k, v in record.items()} for record in res]
+        ids = []
+        try:
+            for m in media:
+                os.remove(m['filename'])
+                ids.append(m['id'])
+        except Exception:
+            pass
+
+        if len(ids) > 0:
+            ids = tuple(ids)
+            cursor = self.dbcon.cursor()
+            cursor.execute(f"delete from {self.db_media} where id in %s", (ids, ))
+            self.dbcon.commit()
+            cursor.close()
 
 
 class OBD2:
@@ -401,9 +435,13 @@ def main():
     sim868 = SIM868(port='/dev/ttySIM868', baudrate=57600, dbcred=dbcred)
     gnssTon = PT()
     videoTon = PT()
+    clearTon = PT()
+
+    sim868.clear_snapshots()
+    sim868.clear_media()
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    vid = cv2.VideoCapture(0)
+    vid = cv2.VideoCapture(int(os.getenv('VIDEOCAPTURE_NUM', 0)))
     vid_width, vid_height = None, None
     video = None
     frames = 0
@@ -429,6 +467,10 @@ def main():
             sim868.gnss = ''
             snapshot_id = sim868.add_snapshot(snapshot)
             print(snapshot_id, snapshot)
+
+        if clearTon.ton_reset(True, 10 * 60000):  # каждые 10 минут
+            sim868.clear_snapshots()
+            sim868.clear_media()
 
         if video is None and vid.isOpened():
             ret, frame = vid.read()

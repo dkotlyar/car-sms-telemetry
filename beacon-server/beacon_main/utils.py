@@ -25,10 +25,13 @@ def to_dict(instance, ignore_to_dict=False, exclude=None):
             continue
 
         obj = getattr(instance, f.name)
-        if type(f) == models.ForeignKey:
-            dict[f.name] = to_dict(obj)
-        if type(f) == models.DateTimeField:
-            dict[f.name] = int(obj.timestamp()*1000)
+        if obj is not None:
+            if type(f) == models.ForeignKey:
+                dict[f.name] = to_dict(obj)
+            if type(f) == models.DateTimeField:
+                dict[f.name] = int(obj.timestamp()*1000)
+        else:
+            dict[f.name] = None
     return dict
 
 

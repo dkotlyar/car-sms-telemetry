@@ -128,7 +128,7 @@ def telemetries(request):
             print('imei', imei)
             cond['session__car__imei'] = imei
         if (session_id := request.GET.get('session_id', '')) != '':
-            cond['session_id'] = session_id
+            cond['session__id'] = session_id
         print(cond)
 
         tlmtrs = Telemetry.objects.filter(**cond)
