@@ -49,6 +49,7 @@ void modbus_clear_reg(void) {
 void modbus_stop(void) {
 	*modbus_tr.usartControl = 0;
 	PORTD &= ~((1<<2)|(1<<3));
+	DDRD |= ((1<<2)|(1<<3));
 }
 
 uint32_t modbus_getReciveTime(void) {

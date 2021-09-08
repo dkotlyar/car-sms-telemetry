@@ -499,7 +499,7 @@ def main():
             except Exception:
                 pass
 
-        if gnssTon.ton_reset(obd2.runtime > 0, int(os.getenv('SNAPSHOT_TIME', 5000))):
+        if gnssTon.ton_reset(obd2.runtime > 0, int(os.getenv('SNAPSHOT_TIME', 1e9))):
             snapshot = {
                 'mcu_millis': obd2.millis,
                 'imei': sim868.imei,
