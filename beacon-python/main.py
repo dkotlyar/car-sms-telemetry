@@ -7,7 +7,6 @@ import time
 from datetime import datetime, timedelta
 
 import cv2
-# import imageio
 import psycopg2
 import psycopg2.extras
 import pytz
@@ -430,9 +429,9 @@ class OBD2:
 
 def main():
     session_datetime = datetime.now(tz=pytz.utc)
-    obd2 = OBD2(port='/dev/ttyOBD2', baudrate=57600)
+    obd2 = OBD2(port=os.getenv('TTY_OBD2', '/dev/ttyOBD2'), baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
-    sim868 = SIM868(port='/dev/ttySIM868', baudrate=57600, dbcred=dbcred)
+    sim868 = SIM868(port=os.getenv('TTY_SIM868', '/dev/ttySIM868'), baudrate=57600, dbcred=dbcred)
     gnssTon = PT()
     videoTon = PT()
     clearTon = PT()
@@ -448,10 +447,24 @@ def main():
     videoname = None
     timestamp = None
 
+    datetime_correct = False
+
     while True:
         time.sleep(0.1)
         obd2.communication()
         sim868.loop()
+
+        if not datetime_correct:
+            try:
+                gnss = sim868.gnss.split(',')
+                if len(gnss) == 21:
+                    UTC_datetime = datetime.strptime(f'{gnss[2]}+0000', '%Y%m%d%H%M%S.%f%z')
+                    if UTC_datetime.year > 1980:
+                        datetime_correct = True
+                        os.system('date -s "%s"' % UTC_datetime)
+            except Exception:
+                pass
+
         if gnssTon.ton_reset(True, int(os.getenv('SNAPSHOT_TIME', 5000))):
             snapshot = {
                 'mcu_millis': obd2.millis,
