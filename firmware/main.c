@@ -69,24 +69,16 @@ void loop(void) {
 
     if (obd2_loop()) { // change obd code
         uint8_t engine = obd2_engine_working();
-        powersave = !engine;
-        if (powersave && !nanopi_worked) {
+        if (!engine && !nanopi_worked) {
             sleepmode = GOTOSLEEP;
         }
     }
 
-    if (read_key()) {
-        powersave = 0;
-    }
-
-    if (!powersave) {
+    if (read_key() || obd2_get_runtime_since_engine_start() > 30000) {
         sim868_pwr_on();
         modbus_start();
         nanopi_worked = 1;
     }
-
-    uint16_t status = 0;
-    SETBIT(status, 0, powersave);
 
     modbus_put32(0, 1, millis());
     modbus_put32(2, 3, obd2_get_runtime_since_engine_start());
@@ -94,7 +86,6 @@ void loop(void) {
     modbus_put16(6, obd2_engine_speed);
     modbus_put8(7, (uint8_t)obd2_engine_coolant_temperature, obd2_vehicle_speed);
     modbus_put32(8, 9, obd2_timestamp);
-    modbus_put16(10, status);
 
 }
 
