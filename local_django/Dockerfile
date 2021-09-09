@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.7-buster
 ENV PYTHONUNBUFFERED=1
 ENV DJANGO_SETTINGS_MODULE=local_django.settings
 WORKDIR /code
