@@ -444,25 +444,75 @@ class OBD2:
             self.obd_timestamp = response[8] | (response[9] << 16)
 
 
+class Video:
+    def __init__(self, capture_channel=0, sim868=None):
+        self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.vid = None
+        self.vid_width, self.vid_height = None, None
+        self.video = None
+        self.frames = 0
+        self.name = None
+        self.timestamp = None
+        self.timer = PT()
+        self.capture_channel = capture_channel
+        self.sim868 = sim868
+
+    @property
+    def vid_isOpened(self):
+        return self.vid is not None and self.vid.isOpened()
+
+    @property
+    def video_isOpened(self):
+        return self.video is not None and self.video.isOpened()
+
+    def loop(self):
+        if self.video is None and self.vid_isOpened:
+            ret, frame = self.vid.read()
+            self.vid_height, self.vid_width = frame.shape[:2]
+            self.timestamp = datetime.now(tz=pytz.utc)
+            self.name = f'media/{self.timestamp.timestamp()}.avi'
+            self.video = cv2.VideoWriter(self.name, self.fourcc, float(10), (self.vid_width, self.vid_height))
+            self.video.write(frame)
+            self.frames += 1
+
+        if self.timer.ton_reset(self.vid_isOpened and self.video_isOpened, 1000):
+            ret, frame = self.vid.read()
+            if frame is None:
+                self.release()
+                self.vid = None
+            else:
+                self.video.write(frame)
+                self.frames += 1
+                if self.frames == 60:
+                    self.video.release()
+                    self.sim868.add_media(self.name, self.timestamp)
+                    self.timestamp = datetime.now(tz=pytz.utc)
+                    self.name = f'media/{self.timestamp.timestamp()}.avi'
+                    self.video = cv2.VideoWriter(self.name, self.fourcc, float(10), (self.vid_width, self.vid_height))
+                    self.frames = 0
+
+        if not self.vid_isOpened:
+            self.release()
+            self.vid = cv2.VideoCapture(self.capture_channel)
+
+    def release(self):
+        if self.video_isOpened:
+            self.video.release()
+            self.video = None
+            self.sim868.add_media(self.name, self.timestamp)
+
+
 def main():
     session_datetime = datetime.now(tz=pytz.utc)
     obd2 = OBD2(port=os.getenv('TTY_OBD2', '/dev/ttyOBD2'), baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
     sim868 = SIM868(port=os.getenv('TTY_SIM868', '/dev/ttySIM868'), baudrate=57600, dbcred=dbcred)
     gnssTon = PT()
-    videoTon = PT()
     clearTon = PT()
+    video = Video(capture_channel=int(os.getenv('VIDEOCAPTURE_NUM', 0)), sim868=sim868)
 
     sim868.clear_snapshots()
     sim868.clear_media()
-
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    vid = cv2.VideoCapture(int(os.getenv('VIDEOCAPTURE_NUM', 0)))
-    vid_width, vid_height = None, None
-    video = None
-    frames = 0
-    video_name = None
-    video_timestamp = None
 
     datetime_correct = False
 
@@ -473,17 +523,14 @@ def main():
         time.sleep(0.1)
         obd2.communication()
         sim868.loop()
+        video.loop()
 
         sleep_tof = int(os.getenv('SLEEP_TOF', 600000))
         if sleep_tof > 0 and not powersave.tof(obd2.runtime > 0, sleep_tof):
             sim868.powerdown()
             obd2.sleep_delay = 3
             obd2.communication()
-            if video is not None and video.isOpened():
-                video.release()
-                sim868.add_media(video_name, video_timestamp)
-            # os.system('shutdown -h now')
-            # break
+            video.release()
             while True:
                 pass
 
@@ -518,32 +565,6 @@ def main():
         if clearTon.ton_reset(True, 10 * 60000):  # каждые 10 минут
             sim868.clear_snapshots()
             sim868.clear_media()
-
-        if video is None and vid.isOpened():
-            ret, frame = vid.read()
-            vid_height, vid_width = frame.shape[:2]
-            video_timestamp = datetime.now(tz=pytz.utc)
-            video_name = f'media/{video_timestamp.timestamp()}.avi'
-            video = cv2.VideoWriter(video_name, fourcc, float(10), (vid_width, vid_height))
-            video.write(frame)
-            frames += 1
-
-        if vid.isOpened() and videoTon.ton_reset(True, 1000):
-            ret, frame = vid.read()
-            video.write(frame)
-            frames += 1
-            if frames == 60:
-                video.release()
-                sim868.add_media(video_name, video_timestamp)
-                video_timestamp = datetime.now(tz=pytz.utc)
-                video_name = f'media/{video_timestamp.timestamp()}.avi'
-                video = cv2.VideoWriter(video_name, fourcc, float(10), (vid_width, vid_height))
-                frames = 0
-
-        if not vid.isOpened():
-            if video is not None and video.isOpened():
-                video.release()
-                sim868.add_media(video_name, video_timestamp)
 
 
 if __name__ == '__main__':
