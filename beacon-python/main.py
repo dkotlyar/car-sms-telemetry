@@ -291,7 +291,7 @@ class SIM868:
 
     def get_snapshots(self, limit=3):
         cursor = self.dbcon.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute(f"select * from {self.db_snapshots} where published=false limit %s", (limit, ))
+        cursor.execute(f"select * from {self.db_snapshots} where published=false and session_datetime is not null limit %s", (limit, ))
         res = cursor.fetchall()
         cursor.close()
         vl = lambda v: int(v.timestamp()*1000) if type(v) == datetime else v
@@ -329,6 +329,19 @@ class SIM868:
         cursor.execute(f"delete from {self.db_snapshots} where (published=true and snapshot_datetime<%s) or "
                        f"(snapshot_datetime<%s)",
                        (datetime.now() - timedelta(days=3), datetime.now() - timedelta(days=7)))
+        self.dbcon.commit()
+        cursor.close()
+
+    def clear_null_session(self):
+        cursor = self.dbcon.cursor()
+        cursor.execute(f"delete from {self.db_snapshots} where session_datetime is null")
+        self.dbcon.commit()
+        cursor.close()
+
+    def update_null_session(self, session_datetime):
+        cursor = self.dbcon.cursor()
+        cursor.execute(f"update {self.db_snapshots} set session_datetime=%s where session_datetime is null",
+                       session_datetime)
         self.dbcon.commit()
         cursor.close()
 
@@ -503,7 +516,6 @@ class Video:
 
 
 def main():
-    session_datetime = datetime.now(tz=pytz.utc)
     obd2 = OBD2(port=os.getenv('TTY_OBD2', '/dev/ttyOBD2'), baudrate=57600)
     dbcred = (dbname, username, passwd, host, port)
     sim868 = SIM868(port=os.getenv('TTY_SIM868', '/dev/ttySIM868'), baudrate=57600, dbcred=dbcred)
@@ -513,12 +525,15 @@ def main():
 
     sim868.clear_snapshots()
     sim868.clear_media()
+    sim868.clear_null_session()
 
     datetime_correct = False
 
     powersave = PT()
     powersave.tof(True, 0)
 
+    session_datetime = None
+    _session_datetime = datetime.now(tz=pytz.utc)
     while True:
         time.sleep(0.1)
         obd2.communication()
@@ -540,13 +555,16 @@ def main():
                 if len(gnss) == 21:
                     UTC_datetime = datetime.strptime(f'{gnss[2]}+0000', '%Y%m%d%H%M%S.%f%z')
                     if UTC_datetime.year > 1980:
+                        td = datetime.now(tz=pytz.utc) - _session_datetime
                         datetime_correct = True
                         os.system('date -s "%s"' % UTC_datetime)
                         powersave.tof(True, 0)
+                        session_datetime = UTC_datetime - td
+                        sim868.update_null_session(session_datetime)
             except Exception:
                 pass
 
-        if gnssTon.ton_reset(obd2.runtime > 0, int(os.getenv('SNAPSHOT_TIME', 1e9))):
+        if gnssTon.ton_reset(True or obd2.runtime > 0, int(os.getenv('SNAPSHOT_TIME', 1e9))):
             snapshot = {
                 'mcu_millis': obd2.millis,
                 'imei': sim868.imei,
