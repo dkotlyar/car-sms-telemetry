@@ -1,0 +1,61 @@
+version: '3.5'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: beacon-local
+      POSTGRES_PASSWORD: qwErty
+    volumes:
+       - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    restart: always
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  back:
+    image: beacon/local-backend
+    volumes:
+      - media:/code/media
+    ports:
+      - 8000:8000
+    depends_on:
+      - postgres
+    restart: always
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  main:
+    image: beacon/main
+    restart: always
+    environment:
+      - OPENCV_LOG_LEVEL=ERROR
+      - SLEEP_TOF=300000
+      - SNAPSHOT_TIME=999999999
+      - VIDEOCAPTURE_NUM=1
+      - DB_NAME=beacon-local
+      - DB_USER=postgres
+      - DB_PASSWD=qwErty
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - TTY_SIM868=/dev/ttyS2
+      - TTY_OBD2=/dev/ttyS1
+    volumes:
+      - media:/code/media
+      - /dev:/dev  # privileged for /dev/video*
+    privileged: true
+    depends_on:
+      - postgres
+    restart: always
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+  media:
