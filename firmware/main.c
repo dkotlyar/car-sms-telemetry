@@ -126,6 +126,7 @@ int main(void) {
 	            timer2 = 0;
 	            wdt_disable();
 	            sim868_pwr_off();
+	            modbus_stop();
 	            sleepmode = SLEEP;
 	            break;
 	        case SLEEP:
