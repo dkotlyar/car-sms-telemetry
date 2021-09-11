@@ -10,7 +10,7 @@ from django.http import HttpResponse, JsonResponse, HttpResponseServerError
 from django.views.decorators.csrf import csrf_exempt
 
 from beacon_main.models import MediaPart, Media, Car, TelemetryRaw, Telemetry, Session
-from beacon_main.utils import get_or_default, to_list, perpage, pages
+from beacon_main.utils import get_or_default, to_list, perpage, pages, default_json_pagination
 
 
 @csrf_exempt
@@ -120,6 +120,23 @@ def add_telemetry(body):
     return telemetry_parsed.id
 
 
+def sessions(request):
+    try:
+        cond = {}
+        if (imei := request.GET.get('imei', '')) != '':
+            cond['car__imei'] = imei
+        if (car_id := request.GET.get('car_id', '')) != '':
+            cond['car__id'] = car_id
+        result = Session.objects.filter(**cond)
+        return default_json_pagination(request, result)
+    except Exception as e:
+        print(e)
+        return JsonResponse({
+            'error_code': 1,
+            'err': e
+        })
+
+
 @csrf_exempt
 def telemetries(request):
     try:
@@ -222,6 +239,24 @@ def media_upload(request, imei, timestamp, format, parts, part):
         print(e)
 
     return HttpResponse(status=400)
+
+
+def get_media_file(request, id):
+    try:
+        media = Media.objects.filter(id=id)
+        if len(media) > 0:
+            media = media[0]
+            with open(media.filepath, 'rb') as f:
+                file_data = f.read()
+
+            response = HttpResponse(file_data, content_type='application/octet-stream')
+            _, filename = os.path.split(media.filepath)
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        return HttpResponse(status=404)
+    except Exception as e:
+        return HttpResponse(status=500)
 
 
 def handler404(request, *args, **argv):
