@@ -443,9 +443,14 @@ class OBD2:
 
     def communication(self):
         if not self.client.is_socket_open():
+            print('reconnect..', end='')
+            res = self.client.connect()
+            print(res)
             return
         self.client.write_registers(address=0x00, values=[self.sleep_delay], unit=1)
         response = self.client.read_input_registers(address=0x00, count=self.input_registers_count, unit=self.unit)
+        if os.getenv('DEBUG_OBD2') == 'yes':
+            print(response)
         if not response.isError():
             response = [response.getRegister(i) for i in range(self.input_registers_count)]
             self.millis = response[0] | (response[1] << 16)
