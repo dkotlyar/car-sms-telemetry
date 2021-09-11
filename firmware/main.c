@@ -74,15 +74,19 @@ void loop(void) {
         }
     }
 
-    if (read_key() || obd2_get_runtime_since_engine_start() > 30000) {
+    if ((read_key() || obd2_get_runtime_since_engine_start() > 30000) && !nanopi_worked) {
         sim868_pwr_on();
         modbus_start();
         nanopi_worked = 1;
     }
 
-    modbus_put32(0, 1, millis());
-    modbus_put32(2, 3, obd2_get_runtime_since_engine_start());
-    modbus_put32(4, 5, obd2_get_aprox_distance_traveled());
+    uint32_t _millis = millis();
+    uint32_t runtime = obd2_get_runtime_since_engine_start();
+    uint32_t distance = obd2_get_aprox_distance_traveled();
+
+    modbus_put32(0, 1, _millis);
+    modbus_put32(2, 3, runtime);
+    modbus_put32(4, 5, distance);
     modbus_put16(6, obd2_engine_speed);
     modbus_put8(7, (uint8_t)obd2_engine_coolant_temperature, obd2_vehicle_speed);
     modbus_put32(8, 9, obd2_timestamp);
@@ -122,7 +126,6 @@ int main(void) {
 	            timer2 = 0;
 	            wdt_disable();
 	            sim868_pwr_off();
-	            modbus_stop();
 	            sleepmode = SLEEP;
 	            break;
 	        case SLEEP:
