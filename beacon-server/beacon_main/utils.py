@@ -1,5 +1,7 @@
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.db import models
 from django.forms import model_to_dict
+from django.http import JsonResponse
 
 
 def get_or_default(obj, field, default=None):
@@ -38,6 +40,7 @@ def to_dict(instance, ignore_to_dict=False, exclude=None):
 def to_list(object_list, exclude=None):
     return [to_dict(instance, exclude=exclude) for instance in object_list]
 
+
 def perpage(per_page, default=20):
     if per_page == '0':
         return 1e9
@@ -45,6 +48,7 @@ def perpage(per_page, default=20):
         return int(per_page)
     else:
         return default
+
 
 def pages(paginator):
     page_range = [p for p in paginator.paginator.page_range if paginator.number - 5 <= p <= paginator.number + 5]
@@ -55,3 +59,22 @@ def pages(paginator):
         'page_range': page_range,
         'number': paginator.number
     }
+
+
+def default_json_pagination(request, items):
+    per_page = perpage(request.GET.get('per_page', ''))
+    page = request.GET.get('page', 1)
+    paginator = Paginator(items, per_page)
+
+    try:
+        items = paginator.get_page(page)
+    except PageNotAnInteger:
+        items = paginator.get_page(1)
+    except EmptyPage:
+        items = paginator.get_page(paginator.num_pages)
+
+    return JsonResponse({
+        'error_code': 0,
+        'items': to_list(items.object_list),
+        'pages': pages(items)
+    })

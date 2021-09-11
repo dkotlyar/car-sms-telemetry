@@ -11,6 +11,9 @@ class Car(models.Model):
     brand = models.CharField(max_length=50)
     model = models.CharField(max_length=50)
 
+    class Meta:
+        ordering = ['-create_datetime']
+
     @staticmethod
     def get_or_create(imei):
         if imei == '':
@@ -34,6 +37,9 @@ class Session(models.Model):
     update_datetime = models.DateTimeField(auto_now=True)
     car = models.ForeignKey(Car, on_delete=models.PROTECT, null=True)
     session_datetime = models.DateTimeField(null=True)
+
+    class Meta:
+        ordering = ['-create_datetime']
 
     @staticmethod
     def get_or_create(car, dt):
@@ -68,6 +74,9 @@ class TelemetryRaw(models.Model):
     vehicle_kmh = models.IntegerField(default=0)
     gps_timestamp = models.IntegerField(default=0)
     gps = models.CharField(max_length=200)
+
+    class Meta:
+        ordering = ['-create_datetime']
 
 
 class Telemetry(models.Model):
@@ -115,6 +124,9 @@ class MediaPart(models.Model):
     part = models.IntegerField()
     parts = models.IntegerField()
 
+    class Meta:
+        ordering = ['-create_datetime']
+
 
 class Media(models.Model):
     create_datetime = models.DateTimeField(auto_now_add=True)
@@ -123,4 +135,7 @@ class Media(models.Model):
     timestamp = models.BigIntegerField()
     format = models.CharField(max_length=10, blank=True)
     filepath = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ['-create_datetime']
 
