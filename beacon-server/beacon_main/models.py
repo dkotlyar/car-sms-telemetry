@@ -82,7 +82,7 @@ class TelemetryRaw(models.Model):
 class Telemetry(models.Model):
     create_datetime = models.DateTimeField(auto_now_add=True)
     update_datetime = models.DateTimeField(auto_now=True)
-    session = models.ForeignKey(Session, on_delete=models.PROTECT)
+    session = models.ForeignKey(Session, on_delete=models.CASCADE)
     snapshot_datetime = models.DateTimeField(null=True)
     obd2_datetime = models.DateTimeField(null=True)
     gps_datetime = models.DateTimeField(null=True)
