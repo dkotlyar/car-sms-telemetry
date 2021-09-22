@@ -1,0 +1,6 @@
+<h1>Список всех сессий:</h1>
+<ul>
+  <li *ngFor="let session of sessions">
+    <a [routerLink]="[session.id]">{{session?.car?.name}} {{session.sessionDatetime|date}}</a>
+  </li>
+</ul>
