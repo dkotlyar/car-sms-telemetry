@@ -34,8 +34,9 @@ services:
     restart: always
     environment:
       - OPENCV_LOG_LEVEL=ERROR
+#      - DEBUG_OBD2=yes
       - SLEEP_TOF=300000
-      - SNAPSHOT_TIME=999999999
+      - SNAPSHOT_TIME=5000
       - VIDEOCAPTURE_NUM=1
       - DB_NAME=beacon-local
       - DB_USER=postgres
