@@ -17,5 +17,5 @@ RUN apt update && \
 
 RUN pip install --no-cache-dir -r requirements.txt -i https://www.piwheels.org/simple
 
-COPY beacon-python /code/
+COPY . /code/
 CMD python -u main.py
