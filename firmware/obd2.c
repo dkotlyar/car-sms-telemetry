@@ -1,10 +1,8 @@
 #include "obd2.h"
 #include "main.h"
 #include "canlib/can_lib.h"
-#include "usart_lib.h"
 #include "millis.h"
 #include <stdio.h>
-#include <string.h>
 
 int8_t obd2_engine_coolant_temperature;
 uint16_t obd2_engine_speed;
@@ -23,8 +21,6 @@ st_cmd_t can_rx;
 st_cmd_t can_tx;
 uint8_t obd_rx_buffer[8];
 uint8_t obd_tx_buffer[8];
-
-//extern usart_t * main_usart;
 
 // obd2_reloop
 uint8_t obd2_reqloop_status;

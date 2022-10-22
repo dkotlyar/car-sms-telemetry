@@ -1,0 +1,36 @@
+version: '3.5'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: beacon
+      POSTGRES_PASSWORD: 4azZcD
+    volumes:
+       - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+  backend:
+    image: beacon/backend
+    # Override command with --insecure parameter for Django admin (css and js) usage
+    # Remove or comment this command if you do not need Django admin panel
+    command: python manage.py runserver 0.0.0.0:8000 --insecure
+    volumes:
+      - migrations:/code/beacon_main/migrations/
+      - media:/code/media/
+    ports:
+      - 8000:8000
+    depends_on:
+      - postgres
+
+  frontend:
+    image: beacon/frontend
+    depends_on:
+      - backend
+    ports:
+      - 8001:80
+
+volumes:
+  pgdata:
+  migrations:
+  media:

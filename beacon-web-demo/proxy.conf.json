@@ -1,0 +1,11 @@
+{
+  "/api": {
+    "target": "http://dkotlyar.ru:8000/",
+    "secure": true,
+    "pathRewrite": {
+      "^/api": ""
+    },
+    "changeOrigin": true,
+    "timeout": 30000
+  }
+}

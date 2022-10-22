@@ -1,0 +1,14 @@
+version: '3.5'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: beacon
+      POSTGRES_PASSWORD: qwerty
+    volumes:
+       - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+volumes:
+  pgdata:

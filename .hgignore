@@ -1,7 +1,16 @@
 syntax: regexp
+.*/.git/.*
 .*/migrations/.*
 .*/venv/.*
 .*/__pycache__/.*
 .*/release
 .*/\.idea
 .*\.orig
+.*/node_modules/.*
+beacon-python/images/.*
+beacon-server/media/.*
+BeaconPhones/.gradle/.*
+BeaconPhones/.*\.gitignore
+BeaconPhones/app/build/.*
+beacon-web-demo/docker/dist/.*
+beacon-python/media
